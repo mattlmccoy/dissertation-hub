@@ -136,6 +136,22 @@
   .ghist{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-bottom:8px;align-items:end}
   .ghbars{display:flex;gap:2px;align-items:end;height:42px}
   .ghbar{width:15px;background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 60%,transparent));border-radius:2px 2px 0 0;min-height:2px}
+  .gsec-title{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);margin:22px 0 10px}
+  .gbars{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg2);padding:12px 14px 16px}
+  .gbaxis{display:grid;grid-template-columns:165px 1fr;gap:10px;margin-bottom:4px}
+  .gbaxis .ticks{position:relative;height:13px}
+  .gbaxis .ticks span{position:absolute;transform:translateX(-50%);font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);white-space:nowrap}
+  .gbphase{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:7px;margin:13px 0 5px}
+  .gbphase i{width:9px;height:9px;border-radius:3px}
+  .gbrow{display:grid;grid-template-columns:165px 1fr;gap:10px;align-items:center;height:23px}
+  .gblabel{font-size:11.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gbrow.done .gblabel{color:var(--muted)}
+  .gbtrack{position:relative;height:15px;border-radius:4px;background:color-mix(in srgb,var(--text) 5%,transparent)}
+  .gbbar{position:absolute;top:1.5px;height:12px;border-radius:3px;cursor:pointer;min-width:5px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);transition:.12s}
+  .gbbar:hover{filter:brightness(1.18);outline:1px solid var(--text)}
+  .gbpill{position:absolute;right:4px;top:0;font-family:"IBM Plex Mono",monospace;font-size:9px;padding:1.5px 8px;border-radius:10px;border:1px dashed var(--line);color:var(--muted);cursor:pointer;white-space:nowrap}
+  .gbpill.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);border-style:solid}
+  .gbpill.blocked{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 45%,transparent)}
 
   /* modal */
   .scrim{position:fixed;inset:0;background:rgba(8,6,4,.66);backdrop-filter:blur(3px);z-index:50;display:none;align-items:flex-start;justify-content:center;padding:6vh 18px;overflow-y:auto}
@@ -409,16 +425,17 @@ function kanbanView(){
   $("#list").appendChild(wrap);
 }
 function ganttView(){
-  const done=DB.tasks.filter(t=>passPhase(t)&&st(t)==="done"&&t.completedAt).sort(doneSort);
+  const all=DB.tasks.filter(passPhase);
+  const done=all.filter(t=>st(t)==="done"&&t.completedAt).sort(doneSort);
   if(!done.length){$("#list").innerHTML=`<div class="empty">No completed tasks with dates ${FILTER?"in "+FILTER:""} yet.</div>`;return}
   const dates=done.map(t=>t.completedAt);
   let min=dates.reduce((a,b)=>a<b?a:b),max=today();
   const span=Math.max(1,days(min,max));const cols=[];for(let i=0;i<=span;i++){const d=new Date(min);d.setDate(d.getDate()+i);cols.push(d.toISOString().slice(0,10))}
   const phases=DB.meta.phases.filter(ph=>!FILTER||ph===FILTER);
   const byCell={};done.forEach(t=>{(byCell[t.phase+"|"+t.completedAt]=byCell[t.phase+"|"+t.completedAt]||[]).push(t)});
-  // histogram
+  // ---- section 1: completion-activity heatmap ----
   const hist=cols.map(d=>done.filter(t=>t.completedAt===d).length);const hmax=Math.max(...hist,1);
-  let html=`<div class="gantt-wrap"><div class="ghist"><div class="glabel">completions/day</div><div class="ghbars">`+
+  let html=`<div class="gsec-title">Completion activity (retrospective)</div><div class="gantt-wrap"><div class="ghist"><div class="glabel">completions/day</div><div class="ghbars">`+
     cols.map((d,i)=>`<div class="ghbar" style="height:${Math.round(hist[i]/hmax*42)}px" title="${d}: ${hist[i]}"></div>`).join("")+`</div></div><div class="gantt">`;
   phases.forEach(ph=>{
     const c=phaseColor(ph);
@@ -426,8 +443,28 @@ function ganttView(){
       cols.map(d=>{const cell=byCell[ph+"|"+d];if(cell){const ids=cell.map(t=>t.id).join(",");return `<div class="gcell has" style="background:${c}" data-ids="${ids}" title="${esc(cell.map(t=>t.title).join(' · '))}">${cell.length>1?cell.length:""}</div>`}return `<div class="gcell" style="background:color-mix(in srgb,var(--text) 6%,transparent)"></div>`}).join("")+
       `</div></div>`;
   });
-  html+=`</div><div class="gaxis"><div></div><div class="gticks">`+cols.map(d=>`<div class="gtick">${(""+(+d.slice(8,10)))}${d.slice(8,10)==="01"?"/"+d.slice(5,7):""}</div>`).join("")+`</div></div></div>`;
-  const div=document.createElement("div");div.innerHTML=html;$("#list").appendChild(div);
+  html+=`</div><div class="gaxis"><div></div><div class="gticks">`+cols.map(d=>`<div class="gtick">${(""+(+d.slice(8,10)))}${d.slice(8,10)==="01"?"/"+d.slice(5,7):""}</div>`).join("")+`</div></div>`;
+  // ---- section 2: classic task-bar gantt ----
+  const pct=d=>Math.max(0,Math.min(100,days(min,d)/span*100));
+  const N=7,ticks=[];for(let i=0;i<=N;i++){const dt=new Date(min);dt.setDate(dt.getDate()+Math.round(span*i/N));ticks.push(dt.toISOString().slice(0,10))}
+  let bg=`<div class="gsec-title">Task timeline <span style="color:var(--muted);text-transform:none;letter-spacing:0"> — done tasks as retrospective bars (gap = time since previous completion); open tasks marked at “now”</span></div>`+
+    `<div class="gbars"><div class="gbaxis"><div></div><div class="ticks">`+
+    ticks.map((d,i)=>`<span style="left:${Math.min(99,i/N*100)}%">${d.slice(5)}</span>`).join("")+`</div></div>`;
+  phases.forEach(ph=>{
+    const ts=all.filter(t=>t.phase===ph);if(!ts.length)return;
+    const c=phaseColor(ph);
+    bg+=`<div class="gbphase"><i style="background:${c}"></i>${ph}</div>`;
+    const dts=ts.filter(t=>st(t)==="done"&&t.completedAt).sort((a,b)=>a.completedAt<b.completedAt?-1:1);
+    let prev=min;
+    dts.forEach(t=>{const l=pct(prev),w=Math.max(1.5,pct(t.completedAt)-l);
+      bg+=`<div class="gbrow done"><div class="gblabel" title="${esc(t.title)}">${esc(t.title)}</div><div class="gbtrack"><div class="gbbar" data-id="${t.id}" title="${esc(t.title)} — done ${t.completedAt}" style="left:${l}%;width:${w}%;background:${c}"></div></div></div>`;
+      prev=t.completedAt;});
+    ts.filter(t=>st(t)!=="done").sort(openSort).forEach(t=>{
+      const s=st(t),cls=s==="active"?"active":s==="blocked"?"blocked":"";
+      bg+=`<div class="gbrow"><div class="gblabel" title="${esc(t.title)}">${esc(t.title)}</div><div class="gbtrack"><div class="gbpill ${cls}" data-id="${t.id}">${s==="active"?"in progress":s==="blocked"?"blocked":"to do"} · now</div></div></div>`;});
+  });
+  bg+=`</div>`;
+  const div=document.createElement("div");div.innerHTML=html+bg;$("#list").appendChild(div);
 }
 
 /* ===================== rendering ===================== */
