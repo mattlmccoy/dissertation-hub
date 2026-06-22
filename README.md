@@ -1,4 +1,4 @@
-# RFAM Dissertation Tracker
+# Dissertation Dashboard
 
 A single-file, GitHub-backed daily/weekly task tracker for the RFAM dissertation
 (defense Oct 2026). Public app shell, **private task data**.
