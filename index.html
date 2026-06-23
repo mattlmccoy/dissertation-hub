@@ -17,7 +17,7 @@
     --p0:#d2603a; --p1:#e0a050; --p2:#8d8270;
     --done:#62b89a;
     --ph-doe:#e0a050; --ph-papers:#9a86c4; --ph-novelty:#62b89a;
-    --ph-lab:#6aa6c4; --ph-diss:#d2603a; --ph-future:#8a8f98;
+    --ph-lab:#6aa6c4; --ph-diss:#d2603a; --ph-future:#8a8f98; --ph-undergrad:#46b5c4;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
@@ -271,13 +271,22 @@
   <div class="modal-actions"><span class="link danger" id="tokenClear">Clear token</span><div class="right"><button class="link" id="setCancel">Close</button><button class="btn primary" id="setSave">Save &amp; Pull</button></div></div>
 </div></div>
 
+<!-- spec PDF viewer -->
+<div class="scrim" id="specScrim"><div class="modal" style="width:min(920px,100%);height:85vh;display:flex;flex-direction:column">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px">
+    <h3 id="specTitle" style="margin:0;font-size:17px">Spec</h3>
+    <div style="display:flex;gap:10px;align-items:center"><button class="btn" id="specOpen">Open in tab ↗</button><button class="link" id="specClose">Close</button></div>
+  </div>
+  <iframe id="specFrame" title="project spec" style="flex:1;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 /* ===================== config ===================== */
 const DEFAULT_REPO="mattlmccoy/dissertation-tracker-data/tasks.json";
 const LS={tok:"rfam_tracker_pat",repo:"rfam_tracker_repo",cache:"rfam_tracker_cache",theme:"rfam_theme",mode:"rfam_mode"};
-const PHASE_VAR={"DoE & Validation":"--ph-doe","Papers":"--ph-papers","Novelty":"--ph-novelty","Lab & Experiments":"--ph-lab","Dissertation":"--ph-diss","Future Work":"--ph-future"};
+const PHASE_VAR={"DoE & Validation":"--ph-doe","Papers":"--ph-papers","Novelty":"--ph-novelty","Lab & Experiments":"--ph-lab","Undergrad Projects":"--ph-undergrad","Dissertation":"--ph-diss","Future Work":"--ph-future"};
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const phaseColor=p=>cssv(PHASE_VAR[p]||"--muted");
 const PRIO_VAR={P0:"--p0",P1:"--p1",P2:"--p2"};
@@ -478,14 +487,14 @@ function taskCard(t){
   return `<div class="task ${done?"done":""}" data-id="${t.id}" style="--lc:${cssv(PRIO_VAR[t.priority]||"--p2")}">
     <div class="check ${done?"on":""}" data-check="${t.id}"></div>
     <div class="tbody"><div class="ttitle">${esc(t.title)}</div>
-    <div class="tmeta"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span>${stc}${when}${due}${cad}<span class="chip" style="color:${c}">${t.phase}</span></div>
+    <div class="tmeta"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span>${stc}${when}${due}${cad}${t.doc?`<span class="chip docbtn" data-doc="${esc(t.doc)}" style="cursor:pointer;color:var(--ph-undergrad);border-color:color-mix(in srgb,var(--ph-undergrad) 45%,transparent)">📄 spec</span>`:""}<span class="chip" style="color:${c}">${t.phase}</span></div>
     ${t.notes?`<div class="tnote">${esc(t.notes)}</div>`:""}</div></div>`;
 }
 function kCard(t){
   const c=phaseColor(t.phase),done=st(t)==="done";
   return `<div class="kcard ${done?"done":""}" draggable="true" data-id="${t.id}" style="--lc:${cssv(PRIO_VAR[t.priority]||"--p2")}">
     <div class="kt">${esc(t.title)}</div>
-    <div class="km"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span><span class="chip" style="color:${c}">${t.phase.split(" ")[0]}</span>${done&&t.completedAt?chip("when","✓"+t.completedAt.slice(5)):""}</div></div>`;
+    <div class="km"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span><span class="chip" style="color:${c}">${t.phase.split(" ")[0]}</span>${t.doc?`<span class="chip docbtn" data-doc="${esc(t.doc)}" style="cursor:pointer;color:var(--ph-undergrad)">📄</span>`:""}${done&&t.completedAt?chip("when","✓"+t.completedAt.slice(5)):""}</div></div>`;
 }
 function renderChips(){
   const box=$("#chips");const counts={};DB.tasks.forEach(t=>counts[t.phase]=(counts[t.phase]||0)+1);
@@ -515,10 +524,30 @@ $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab");if(b){V
 $("#chips").addEventListener("click",e=>{const b=e.target.closest(".fchip");if(b){const p=b.dataset.ph;FILTER=p?p:null;render()}});
 $("#list").addEventListener("click",e=>{
   const chk=e.target.closest("[data-check]");if(chk){e.stopPropagation();toggleDone(chk.dataset.check);return}
+  const dc=e.target.closest("[data-doc]");if(dc){e.stopPropagation();openSpec(dc.dataset.doc);return}
   const g=e.target.closest(".gcell.has");if(g){openEditor(g.dataset.ids.split(",")[0]);return}
   const card=e.target.closest("[data-id]");if(card)openEditor(card.dataset.id);
 });
 $("#list").addEventListener("dragstart",e=>{const c=e.target.closest(".kcard");if(c)e.dataTransfer.setData("id",c.dataset.id)});
+
+/* spec PDF viewer — fetches from the PRIVATE data repo with the user's token (never public) */
+async function openSpec(path){
+  if(!token()){openSettings();toast("Add your token to view specs",1);return}
+  const {owner,repo}=repoParts();
+  $("#specTitle").textContent=path.split("/").pop();
+  $("#specFrame").src="about:blank";$("#specScrim").classList.add("on");
+  try{
+    const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"}});
+    if(!r.ok){toast("Spec fetch failed: "+r.status,1);return}
+    const j=await r.json();
+    const bytes=Uint8Array.from(atob(j.content.replace(/\n/g,"")),c=>c.charCodeAt(0));
+    const url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+    $("#specFrame").src=url;$("#specOpen").onclick=()=>window.open(url,"_blank");
+  }catch(err){toast("Spec error: "+err.message,1)}
+}
+$("#specClose").onclick=()=>$("#specScrim").classList.remove("on");
+$("#specScrim").addEventListener("click",e=>{if(e.target.id==="specScrim")$("#specScrim").classList.remove("on")});
 
 function openEditor(id){
   editingId=id||null;
@@ -580,7 +609,7 @@ $("#setScrim").addEventListener("click",e=>{if(e.target.id==="setScrim")$("#setS
 $("#tokenClear").onclick=()=>{localStorage.removeItem(LS.tok);$("#f-token").value="";renderSync();toast("Token cleared")};
 $("#setSave").onclick=async()=>{const tk=$("#f-token").value.trim(),rp=$("#f-repo").value.trim();if(tk)localStorage.setItem(LS.tok,tk);if(rp)localStorage.setItem(LS.repo,rp);$("#setScrim").classList.remove("on");if(tk)await ghPull();else toast("Saved (offline)")};
 $("#syncBtn").onclick=async()=>{DIRTY?await ghPush():await ghPull()};
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeEditor();$("#setScrim").classList.remove("on");$("#wirScrim").classList.remove("on")}if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();if(DIRTY)ghPush()}if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();$("#undoBtn").click()}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeEditor();$("#setScrim").classList.remove("on");$("#wirScrim").classList.remove("on");$("#specScrim").classList.remove("on")}if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();if(DIRTY)ghPush()}if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();$("#undoBtn").click()}});
 
 /* ===================== boot ===================== */
 const SEED={meta:{title:"RFAM Dissertation Tracker",defenseDate:"2026-10-15",phases:["DoE & Validation","Papers","Novelty","Lab & Experiments","Dissertation","Future Work"]},tasks:[]};
