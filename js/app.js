@@ -1,195 +1,207 @@
-import * as pdfjs from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
-pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
-import { anchorFromSelection } from './anchor.js';
 import { newReview, addComment } from './model.js';
+import { anchorFromSelection } from './anchor.js';
 
-const SCALE = 1.4;
-const CHAPTERS = { ch_modeling: 'Chapter 4 · Computational Modeling' };
-const readPane = document.getElementById('read-pane');
-readPane.style.cssText = 'flex:1;min-width:0;position:relative;overflow:auto;height:calc(100vh - 49px)';
+const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
+const CHAPTERS = [
+  { id:'ch_introduction', n:1, title:'Introduction' },
+  { id:'ch_background',   n:2, title:'Background: RF Dielectric Heating and Prior RFAM' },
+  { id:'ch_platform',     n:3, title:'Design and Characterization of a Custom RFAM Platform' },
+  { id:'ch_modeling',     n:4, title:'Computational Modeling of RF Sintering' },
+  { id:'ch_compensation', n:5, title:'Simulation-Guided Compensation' },
+  { id:'ch_validation',   n:6, title:'Experimental Validation' },
+  { id:'ch_design_guide', n:7, title:'Design for RFAM: A Physics-Derived Capability Envelope' },
+  { id:'ch_materials',    n:8, title:'Extensibility of RF in Advanced Manufacturing' },
+  { id:'ch_conclusions',  n:9, title:'Conclusions' },
+];
+const chMeta = id => CHAPTERS.find(c => c.id === id) || { n:'?', title:id };
+const TAGS = ['claim','wording','figure','citation','question'];
 
-let mode = 'html';        // 'html' | 'pdf'
-let currentChapter = 'ch_modeling';
+const read = document.getElementById('read');
+let current = 'ch_modeling';
+let review = loadLocalReview(current);
 
-document.getElementById('topbar').innerHTML =
-  `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:.5px solid var(--border);background:var(--bg-2)">
-     <strong style="font-weight:500">Dissertation Reviewer</strong>
-     <span id="ch-label" style="color:var(--text-2);font-size:13px">${CHAPTERS[currentChapter]}</span>
-     <span style="margin-left:auto;display:inline-flex;gap:6px">
-       <button id="mode-html" title="Reflowed reading">Reading</button>
-       <button id="mode-pdf" title="Compiled PDF (true layout)">PDF</button>
-       <label style="font-size:12px;cursor:pointer;border:.5px solid var(--border-2);border-radius:8px;padding:6px 11px">Open<input type="file" id="pdf-file" accept=".pdf,.html" class="hidden"></label>
-     </span>
-   </div>`;
+function loadLocalReview(ch){ return JSON.parse(localStorage.getItem('review:'+ch) || 'null') || newReview(ch, ''); }
+const save = () => localStorage.setItem('review:'+current, JSON.stringify(review));
+const tok = () => localStorage.getItem('ghpat');
 
-let review = JSON.parse(localStorage.getItem('review:current') || 'null') || newReview(currentChapter, '');
-const save = () => localStorage.setItem('review:current', JSON.stringify(review));
+// ---------- top bar ----------
+function renderTopbar(){
+  const m = chMeta(current);
+  document.getElementById('topbar').innerHTML = `
+    <button class="chsel" id="chsel"><i class="ti ti-book-2"></i><span>Chapter ${m.n} · ${shortTitle(m.title)}</span><i class="ti ti-chevron-down" style="font-size:15px;color:var(--text-3)"></i></button>
+    <div class="search"><i class="ti ti-search"></i><input id="search" placeholder="Search chapter · ⌘\\ for all"></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:3px">
+      <button class="icbtn" id="btn-history" title="History"><i class="ti ti-history"></i></button>
+      <button class="icbtn" id="btn-theme" title="Theme"><i class="ti ti-moon"></i></button>
+      <button class="btn btn-primary" id="btn-send"><i class="ti ti-send"></i>Send to Claude</button>
+      <button class="icbtn" id="btn-more"><i class="ti ti-dots"></i></button>
+    </div>`;
+  document.getElementById('chsel').onclick = openChapterMenu;
+  document.getElementById('btn-theme').onclick = toggleTheme;
+  document.getElementById('btn-send').onclick = sendToClaude;
+  const si = document.getElementById('search');
+  si.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(si.value); if (e.key === 'Escape'){ si.value=''; clearSearch(); } });
+}
+const shortTitle = t => { const s = t.split(':')[0].replace(/ and .*/,''); return s.length <= 30 ? s : s.slice(0,30).replace(/\s\S*$/,'') + '…'; };
 
-function runKatex(el){
-  if (!window.katex){ setTimeout(() => runKatex(el), 120); return; }
-  el.querySelectorAll('span.math').forEach(s => {
-    try { window.katex.render(s.textContent, s, { displayMode: s.classList.contains('display'), throwOnError:false }); }
-    catch(e){ /* leave raw TeX on failure */ }
-  });
+function openChapterMenu(){
+  const old = document.getElementById('chmenu'); if (old){ old.remove(); return; }
+  const menu = document.createElement('div'); menu.id = 'chmenu';
+  menu.style.cssText = 'position:absolute;top:50px;left:16px;z-index:40;background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-md);box-shadow:0 10px 34px rgba(0,0,0,.16);padding:6px;min-width:330px';
+  menu.innerHTML = CHAPTERS.map(c => `<div data-ch="${c.id}" style="display:flex;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px${c.id===current?';background:var(--accent-bg);color:var(--accent)':''}"><span style="color:var(--text-3);min-width:20px">${c.n}</span>${shortTitle(c.title)}</div>`).join('');
+  menu.querySelectorAll('[data-ch]').forEach(d => { d.onmouseenter = () => { if (d.dataset.ch!==current) d.style.background='var(--bg-3)'; };
+    d.onmouseleave = () => { if (d.dataset.ch!==current) d.style.background='transparent'; };
+    d.onclick = () => { menu.remove(); selectChapter(d.dataset.ch); }; });
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', function h(e){ if (!menu.contains(e.target) && e.target.id!=='chsel'){ menu.remove(); document.removeEventListener('click', h); } }), 0);
+}
+function selectChapter(ch){ current = ch; review = loadLocalReview(ch); renderTopbar(); renderComments(); loadChapter(ch); }
+function toggleTheme(){ document.documentElement.classList.toggle('dark'); localStorage.setItem('theme', document.documentElement.classList.contains('dark')?'dark':'light'); }
+if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+
+// ---------- content (GitHub-pulled; localhost dev-fallback for UI work only) ----------
+async function loadChapter(ch){
+  read.innerHTML = `<div class="empty"><i class="ti ti-loader-2" style="font-size:22px"></i><div style="margin-top:8px">Loading chapter ${chMeta(ch).n}…</div></div>`;
+  const dev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (dev){ try { const r = await fetch(`./chapters/${ch}.html`); if (r.ok){ renderDoc(await r.text()); return; } } catch(e){} }
+  const t = tok();
+  if (!t){ renderConnect(); return; }
+  try {
+    const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/content/${ch}.html`,
+      { headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' } });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    renderDoc(await r.text());
+  } catch(e){ read.innerHTML = `<div class="empty">Couldn't pull chapter ${chMeta(ch).n} from your private repo (${e.message}). Check the access token in <b>⋯ → Settings</b>.</div>`; }
+}
+function renderConnect(){
+  read.innerHTML = `<div class="empty"><i class="ti ti-lock" style="font-size:24px;color:var(--text-3)"></i>
+    <div style="font-size:17px;font-weight:500;margin:10px 0 6px">Connect your dissertation</div>
+    <div style="font-size:13px;line-height:1.6;margin-bottom:16px">Chapters are pulled privately from your <code>${DATA_REPO}</code> repo. Paste a fine-grained token (Contents: read) — stored only in this browser.</div>
+    <button class="btn" id="connect">Add access token</button></div>`;
+  document.getElementById('connect').onclick = () => { const v = prompt('Fine-grained PAT (Contents read on the data repo):'); if (v){ localStorage.setItem('ghpat', v.trim()); loadChapter(current); } };
 }
 
-// ---------- HTML reading surface (primary) ----------
-export function renderHtml(fragment){
-  mode = 'html';
-  readPane.innerHTML = `<article id="doc">${fragment}</article>`;
+function renderDoc(fragment){
+  read.innerHTML = `<article id="doc">${fragment}</article>`;
   runKatex(document.getElementById('doc'));
+  buildNav();
+  restoreCursor();
+}
+function runKatex(el){
+  if (!window.katex){ setTimeout(() => runKatex(el), 100); return; }
+  el.querySelectorAll('span.math').forEach(s => { try { window.katex.render(s.textContent, s, { displayMode:s.classList.contains('display'), throwOnError:false }); } catch(e){} });
 }
 
-// ---------- compiled-PDF toggle ----------
-export async function renderPdf(arrayBuf){
-  mode = 'pdf';
-  readPane.innerHTML = '';
-  const doc = await pdfjs.getDocument({ data: arrayBuf }).promise;
-  window.__pdf = doc;
-  for (let n = 1; n <= doc.numPages; n++){
-    const page = await doc.getPage(n);
-    const vp = page.getViewport({ scale: SCALE });
-    const wrap = document.createElement('div');
-    wrap.className = 'pdf-page'; wrap.dataset.page = n;
-    wrap.style.cssText = `position:relative;margin:16px auto;width:${vp.width}px`;
-    wrap.style.setProperty('--scale-factor', SCALE);
-    const canvas = document.createElement('canvas'); canvas.width = vp.width; canvas.height = vp.height;
-    canvas.style.cssText = 'display:block;border:.5px solid var(--border);background:#fff;border-radius:4px';
-    wrap.appendChild(canvas); readPane.appendChild(wrap);
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-    const tl = document.createElement('div'); tl.className = 'textLayer'; wrap.appendChild(tl);
-    const tc = await page.getTextContent();
-    await new pdfjs.TextLayer({ textContentSource: tc, container: tl, viewport: vp }).render();
-  }
+// ---------- left section navigator ----------
+function buildNav(){
+  const nav = document.getElementById('nav');
+  const hs = [...document.querySelectorAll('#doc h2, #doc h3')];
+  nav.innerHTML = `<div class="lbl">SECTIONS</div>`;
+  hs.forEach((h, i) => {
+    if (!h.id) h.id = 'sec-' + i;
+    const sub = h.tagName === 'H3';
+    const cnt = review.comments.filter(c => (c.anchor.section||'') === h.textContent.trim()).length;
+    const a = document.createElement('a'); a.className = sub ? 'sub' : '';
+    a.dataset.sec = h.id;
+    a.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.textContent}</span>${cnt?`<span class="count">${cnt}</span>`:''}`;
+    a.onclick = () => h.scrollIntoView({ behavior:'smooth', block:'start' });
+    nav.appendChild(a);
+  });
+  read.onscroll = () => { let cur = null; hs.forEach(h => { if (h.getBoundingClientRect().top < 140) cur = h.id; });
+    nav.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.sec === cur)); };
+  read.onscroll();
 }
 
-// ---------- select-to-comment (mode-agnostic) ----------
-let pendingAnchor = null;
-readPane.addEventListener('mouseup', () => {
-  const sel = window.getSelection();
-  const text = sel.toString();
+// ---------- select-to-comment ----------
+let pending = null;
+read.addEventListener('mouseup', () => {
+  if (document.getElementById('pop')) return;
+  const sel = window.getSelection(); const text = sel.toString();
   if (!text.trim() || sel.rangeCount === 0) return;
-  if (document.getElementById('anchor-pop')) return; // don't re-trigger while editing
   const range = sel.getRangeAt(0);
-  const pageEl = range.startContainer.parentElement?.closest('.pdf-page');
-  const rp = readPane.getBoundingClientRect();
-  const rects = [...range.getClientRects()].map(r => ({ x: r.x - rp.x, y: r.y - rp.y + readPane.scrollTop, w: r.width, h: r.height }));
-  const heading = headingFor(range.startContainer);
-  pendingAnchor = anchorFromSelection({ text, page: pageEl ? +pageEl.dataset.page : null, rects });
-  pendingAnchor.section = heading;
-  showAnchorPopover(pendingAnchor, rects);
+  if (!range.startContainer.parentElement?.closest('#doc')) return;
+  const rr = read.getBoundingClientRect();
+  const rects = [...range.getClientRects()].map(r => ({ x:r.x-rr.x, y:r.y-rr.y+read.scrollTop, w:r.width, h:r.height }));
+  pending = anchorFromSelection({ text, page:null, rects });
+  pending.section = headingFor(range.startContainer);
+  showPopover(pending, rects);
 });
-
 function headingFor(node){
   let el = node.nodeType === 1 ? node : node.parentElement;
-  while (el && el.id !== 'doc'){
-    let p = el.previousElementSibling;
-    while (p){ if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
-    el = el.parentElement;
-  }
+  while (el && el.id !== 'doc'){ let p = el.previousElementSibling;
+    while (p){ if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; } el = el.parentElement; }
   return '';
 }
-
-function showAnchorPopover(anchor, rects){
-  document.getElementById('anchor-pop')?.remove();
-  const top = Math.max(...rects.map(r => r.y + r.h)) + 8;
-  const loc = anchor.section ? `§ ${anchor.section.slice(0,40)}` : 'this passage';
-  const pop = document.createElement('div'); pop.id = 'anchor-pop';
-  pop.style.cssText = `position:absolute;left:50%;transform:translateX(-50%);top:${top}px;width:min(640px,92%);background:var(--bg);border:.5px solid var(--info);border-radius:var(--r-md);padding:10px 12px;z-index:5;box-shadow:0 4px 18px rgba(0,0,0,.12)`;
-  pop.innerHTML =
-    `<div style="font-size:11px;color:var(--text-2);display:flex">Commenting on
-       <span style="margin-left:auto;color:var(--success)">⛓ ${loc}</span></div>
-     <div style="font-style:italic;font-size:12px;color:var(--text-3);border-left:2px solid var(--border-2);padding-left:8px;margin:6px 0">"${anchor.quote.slice(0,140)}"</div>
-     <div id="tagrow" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"></div>
-     <textarea id="cbody" rows="2" placeholder="comment…" style="width:100%;border:.5px solid var(--border);border-radius:6px;padding:6px;font:inherit;background:var(--bg);color:var(--text)"></textarea>
-     <div style="display:flex;gap:8px;margin-top:8px"><button id="csave">Comment</button><button id="ccancel">Cancel</button></div>`;
-  readPane.appendChild(pop);
-  const tags = ['claim','wording','figure','citation','question']; let tag = 'claim';
-  const tr = pop.querySelector('#tagrow');
-  tags.forEach(t => { const b = document.createElement('button'); b.textContent = t;
-    b.style.cssText = 'font-size:11px;padding:2px 9px;border-radius:10px;border:.5px solid var(--border)';
-    const pick = () => { tag = t; [...tr.children].forEach(x => x.style.background = 'transparent'); b.style.background = 'var(--bg-3)'; };
-    b.onclick = pick; tr.appendChild(b); if (t === 'claim') pick(); });
-  pop.querySelector('#ccancel').onclick = () => pop.remove();
+function showPopover(anchor, rects){
+  document.getElementById('pop')?.remove();
+  const top = Math.max(...rects.map(r => r.y + r.h)) + 10;
+  const pop = document.createElement('div'); pop.id = 'pop'; pop.className = 'popover';
+  pop.style.top = top + 'px'; pop.style.left = '50%'; pop.style.transform = 'translateX(-50%)';
+  pop.innerHTML = `
+    <div class="head"><i class="ti ti-link" style="margin-right:5px"></i>Commenting on
+      <span class="loc"><i class="ti ti-circle-check-filled"></i>${anchor.section ? '§ '+anchor.section.slice(0,38) : 'this passage'}</span></div>
+    <div class="snip">"${anchor.quote.slice(0,150)}"</div>
+    <div class="tags" id="tags"></div>
+    <textarea id="cbody" placeholder="Leave a comment…"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
+  read.appendChild(pop);
+  let tag = 'claim'; const tr = pop.querySelector('#tags');
+  TAGS.forEach(t => { const b = document.createElement('button'); b.textContent = t;
+    const pick = () => { tag = t; [...tr.children].forEach(x => { x.className=''; }); b.className='on'; b.style.background=`var(--${t}-bg)`; b.style.color=`var(--${t})`; };
+    b.onclick = pick; tr.appendChild(b); if (t==='claim') pick(); });
+  pop.querySelector('#cbody').focus();
+  pop.querySelector('#ccancel').onclick = () => { pop.remove(); window.getSelection().removeAllRanges(); };
   pop.querySelector('#csave').onclick = () => {
-    window.dispatchEvent(new CustomEvent('comment:add', { detail: { anchor: pendingAnchor, tag, body: pop.querySelector('#cbody').value } }));
-    pop.remove(); window.getSelection().removeAllRanges();
+    review = addComment(review, { anchor:pending, tag, body:pop.querySelector('#cbody').value }); save();
+    renderComments(); buildNav(); pop.remove(); window.getSelection().removeAllRanges();
   };
 }
 
 // ---------- comments rail ----------
-const tagColors = { claim:['--claim-bg','--claim'], wording:['--wording-bg','--wording'],
-  figure:['--figure-bg','--figure'], citation:['--citation-bg','--citation'], question:['--question-bg','--question'], other:['--wording-bg','--wording'] };
 function renderComments(){
-  const pane = document.getElementById('comments-pane');
-  pane.style.cssText = 'width:230px;flex-shrink:0;background:var(--bg-2);padding:10px;border-left:.5px solid var(--border);overflow:auto;height:calc(100vh - 49px)';
+  const pane = document.getElementById('comments');
   const open = review.comments.filter(c => c.status === 'open').length;
-  pane.innerHTML = `<div style="font-size:11px;color:var(--text-3);margin-bottom:8px;display:flex">COMMENTS<span style="margin-left:auto">${review.comments.length} · ${open} open</span></div>`;
+  pane.innerHTML = `<div class="lbl">COMMENTS<span style="margin-left:auto">${review.comments.length} · ${open} open</span></div>`;
+  if (!review.comments.length){ pane.innerHTML += `<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text in the chapter to leave a comment.</div>`; return; }
   review.comments.forEach(c => {
-    const [bg,fg] = tagColors[c.tag] || tagColors.other;
-    const stClr = c.status === 'staged' ? '--info' : c.status === 'merged' ? '--success' : '--text-2';
-    const card = document.createElement('div');
-    card.style.cssText = 'background:var(--bg);border:.5px solid var(--border);border-radius:var(--r-md);padding:9px 10px;margin-bottom:8px;cursor:pointer';
-    card.innerHTML = `<div style="display:flex;gap:6px;margin-bottom:6px">
-        <span style="font-size:10px;font-weight:500;padding:1px 8px;border-radius:10px;background:var(${bg});color:var(${fg})">${c.tag}</span>
-        <span style="margin-left:auto;font-size:10px;padding:1px 8px;border-radius:10px;color:var(${stClr})">${c.status}</span></div>
-      <div style="font-size:11px;font-style:italic;color:var(--text-3);margin-bottom:5px">"${(c.anchor.quote || '').slice(0,46)}"</div>
-      <div style="font-size:13px;line-height:1.5">${c.body || ''}</div>`;
-    card.onclick = () => jumpToAnchor(c);
+    const stColor = c.status==='staged' ? 'var(--info)' : c.status==='merged' ? 'var(--success)' : 'var(--text-2)';
+    const stBg = c.status==='staged' ? 'var(--info-bg)' : c.status==='merged' ? 'var(--success-bg)' : 'transparent';
+    const card = document.createElement('div'); card.className = 'ccard';
+    card.innerHTML = `<div class="row">
+        <span class="chip" style="background:var(--${c.tag}-bg);color:var(--${c.tag})">${c.tag}</span>
+        <span class="status" style="background:${stBg};color:${stColor}">${c.status}</span></div>
+      <div class="snip">"${(c.anchor.quote||'').slice(0,52)}"</div>
+      <div class="body">${escapeHtml(c.body)}</div>
+      ${c.claude?.branch ? `<div class="branch"><i class="ti ti-git-branch"></i>${c.claude.branch}</div>` : ''}`;
+    card.onclick = () => jumpTo(c);
     pane.appendChild(card);
   });
 }
-window.addEventListener('comment:add', e => { review = addComment(review, e.detail); save(); renderComments(); });
-
-function jumpToAnchor(c){
-  if (mode === 'pdf'){
-    const pageEl = document.querySelector(`.pdf-page[data-page="${c.page}"]`);
-    if (!pageEl) return; pageEl.scrollIntoView({ behavior:'smooth', block:'center' });
-    (c.anchor.rects || []).forEach(r => { const m = document.createElement('div');
-      m.style.cssText = `position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:var(--warn-bg);opacity:.55;pointer-events:none;border-radius:2px`;
-      pageEl.appendChild(m); setTimeout(() => m.remove(), 1600); });
-    return;
-  }
-  const q = (c.anchor.quote || '').replace(/\s+/g,' ').trim().slice(0,40);
-  const ps = [...document.querySelectorAll('#doc p, #doc li, #doc figcaption')];
-  const hit = ps.find(p => p.textContent.replace(/\s+/g,' ').includes(q));
-  if (hit){ hit.scrollIntoView({ behavior:'smooth', block:'center' });
-    hit.classList.add('flash-html'); setTimeout(() => hit.classList.remove('flash-html'), 1600); }
+function jumpTo(c){
+  const q = (c.anchor.quote||'').replace(/\s+/g,' ').trim().slice(0,40);
+  const el = [...document.querySelectorAll('#doc p, #doc li, #doc figcaption, #doc h2, #doc h3')].find(p => p.textContent.replace(/\s+/g,' ').includes(q));
+  if (el){ el.scrollIntoView({ behavior:'smooth', block:'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
 }
+const escapeHtml = s => (s||'').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
 
-// ---------- bootstrap ----------
-renderComments();
-document.getElementById('mode-html').onclick = () => loadChapterHtml(currentChapter);
-document.getElementById('mode-pdf').onclick = () => document.getElementById('pdf-file').click();
-document.getElementById('pdf-file').addEventListener('change', async e => {
-  const f = e.target.files[0]; if (!f) return;
-  if (f.name.endsWith('.html')) renderHtml(await f.text());
-  else renderPdf(await f.arrayBuffer());
-});
+// ---------- search ----------
+function runSearch(q){ clearSearch(); if (!q.trim()) return; const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+  let first = null; document.querySelectorAll('#doc p').forEach(p => { if (re.test(p.textContent)){ p.innerHTML = p.innerHTML.replace(re, m => `<mark style="background:var(--warn-bg)">${m}</mark>`); if (!first) first = p; } });
+  if (first) first.scrollIntoView({ behavior:'smooth', block:'center' }); }
+function clearSearch(){ document.querySelectorAll('#doc mark').forEach(m => m.replaceWith(...m.childNodes)); }
 
-function renderEmptyState(){
-  readPane.innerHTML =
-    `<div style="max-width:440px;margin:16vh auto;text-align:center;padding:30px;border:.5px dashed var(--border-2);border-radius:var(--r-lg)">
-       <div style="font-size:17px;font-weight:500;margin-bottom:6px">Open a chapter to review</div>
-       <div style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6">Pick a generated chapter <code>.html</code> (or a compiled <code>.pdf</code>), or drag the file anywhere onto this pane.</div>
-       <button id="empty-open" style="padding:8px 16px">Open chapter…</button>
-     </div>`;
-  document.getElementById('empty-open').onclick = () => document.getElementById('pdf-file').click();
+// ---------- send to claude / cursor ----------
+function sendToClaude(){
+  const open = review.comments.filter(c => c.status === 'open');
+  if (!open.length){ flash('No open comments to send.'); return; }
+  flash(`Queued ${open.length} comment${open.length>1?'s':''} for Claude → review-edits/${current}`);
+  // (P2/P3: writes a job to jobs.json in the data repo via PAT.)
 }
-async function loadChapterHtml(ch){
-  try {
-    const r = await fetch(`./chapters/${ch}.html`);
-    if (!r.ok) throw new Error(r.status);
-    renderHtml(await r.text());
-  } catch (e){
-    renderEmptyState();   // expected on the public site: chapter content stays local, loaded via Open/drop
-  }
-}
-readPane.addEventListener('dragover', e => { e.preventDefault(); });
-readPane.addEventListener('drop', async e => {
-  e.preventDefault();
-  const f = e.dataTransfer.files[0]; if (!f) return;
-  if (f.name.endsWith('.html')) renderHtml(await f.text());
-  else if (f.name.endsWith('.pdf')) renderPdf(await f.arrayBuffer());
-});
-loadChapterHtml(currentChapter);
+function flash(msg){ const t = document.createElement('div'); t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.2)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+function restoreCursor(){ if (review.cursor?.sec){ document.getElementById(review.cursor.sec)?.scrollIntoView(); } }
+
+// ---------- boot ----------
+renderTopbar(); renderComments(); loadChapter(current);
+window.addEventListener('keydown', e => { if ((e.metaKey||e.ctrlKey) && e.key === '\\'){ e.preventDefault(); document.getElementById('search')?.focus(); } });

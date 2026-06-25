@@ -3,52 +3,93 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dissertation Reviewer</title>
-<style>
-:root{
-  --bg:#ffffff; --bg-2:#f7f6f3; --bg-3:#efeee9; --text:#1a1a18; --text-2:#5f5e5a; --text-3:#8a8980;
-  --border:rgba(0,0,0,.12); --border-2:rgba(0,0,0,.22);
-  --info-bg:#e6f1fb; --info:#185fa5; --success-bg:#e1f5ee; --success:#0f6e56; --warn-bg:#faeeda; --warn:#854f0b;
-  --r-md:8px; --r-lg:12px;
-  --claim-bg:#e6f1fb; --claim:#0c447c; --figure-bg:#eeedfe; --figure:#26215c;
-  --wording-bg:#f1efe8; --wording:#2c2c2a; --question-bg:#faeeda; --question:#633806;
-  --citation-bg:#fbeaf0; --citation:#72243e;
-  font-family:-apple-system,system-ui,"Segoe UI",sans-serif;
-}
-@media(prefers-color-scheme:dark){:root{
-  --bg:#1f1e1c; --bg-2:#272622; --bg-3:#302f2a; --text:#f3f1ec; --text-2:#b4b2a9; --text-3:#888780;
-  --border:rgba(255,255,255,.14); --border-2:rgba(255,255,255,.26);
-}}
-*{box-sizing:border-box} body{margin:0;background:var(--bg-3);color:var(--text);font-size:14px;line-height:1.6}
-button{font:inherit;color:inherit;background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-md);padding:6px 12px;cursor:pointer}
-button:hover{background:var(--bg-2)} button:active{transform:scale(.98)}
-.hidden{display:none!important}
-.textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0}
-.textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0}
-.textLayer span::selection{background:rgba(80,130,230,.35)}
-.textLayer ::selection{background:rgba(80,130,230,.35)}
-#doc{max-width:760px;margin:0 auto;padding:28px 8px 120px;font-size:16px;line-height:1.75;color:var(--text)}
-#doc h1{font-size:24px;font-weight:500;margin:0 0 18px;text-align:left}
-#doc h2{font-size:20px;font-weight:500;margin:32px 0 10px}
-#doc h3{font-size:17px;font-weight:500;margin:24px 0 8px;color:var(--text-2)}
-#doc p{margin:0 0 14px}
-#doc img{max-width:100%;height:auto;display:block;margin:14px auto;border:.5px solid var(--border);border-radius:6px;background:#fff}
-#doc figure{margin:20px 0} #doc figcaption{font-size:13px;color:var(--text-2);margin-top:6px;text-align:center}
-#doc .references,#doc #refs{font-size:13px;color:var(--text-2);border-top:.5px solid var(--border);margin-top:32px;padding-top:14px}
-#doc ::selection{background:rgba(80,130,230,.30)}
-.flash-html{background:var(--warn-bg);border-radius:3px;box-shadow:0 0 0 2px var(--warn-bg)}
-</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<style>
+:root{
+  --bg:#ffffff; --bg-2:#faf9f7; --bg-3:#f1efe9; --text:#1f1e1c; --text-2:#605e58; --text-3:#8f8d84;
+  --border:rgba(0,0,0,.10); --border-2:rgba(0,0,0,.16); --accent:#2c64c4; --accent-bg:#eaf1fb;
+  --info:#185fa5; --info-bg:#e6f1fb; --success:#0f6e56; --success-bg:#e1f5ee; --warn:#9a6a12; --warn-bg:#faf0d8;
+  --r-sm:7px; --r-md:9px; --r-lg:13px;
+  --claim:#0c447c; --claim-bg:#e6f1fb; --figure:#3c3489; --figure-bg:#edebfb;
+  --wording:#44443f; --wording-bg:#efece4; --citation:#72243e; --citation-bg:#fbe9ef; --question:#7a4a09; --question-bg:#f9efd8;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+}
+.dark{
+  --bg:#1b1a18; --bg-2:#222120; --bg-3:#2b2a27; --text:#f4f2ec; --text-2:#b1afa6; --text-3:#85837b;
+  --border:rgba(255,255,255,.12); --border-2:rgba(255,255,255,.20); --accent:#6aa0ec; --accent-bg:#1b2c44;
+  --info:#7fb3ec; --info-bg:#17283d; --success:#69c6a3; --success-bg:#11362c; --warn:#e0b15e; --warn-bg:#3a2f17;
+  --claim:#bcd6f5; --claim-bg:#17293f; --figure:#c9c2f2; --figure-bg:#262147;
+  --wording:#cdcbc2; --wording-bg:#33322e; --citation:#f0b6c8; --citation-bg:#3a2029; --question:#ecc483; --question-bg:#3a2f17;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+.icbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--r-md);color:var(--text-2)}
+.icbtn:hover{background:var(--bg-3);color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:.5px solid var(--border-2);border-radius:var(--r-md);font-size:13px;font-weight:500}
+.btn:hover{background:var(--bg-2)} .btn:active{transform:scale(.985)}
+.btn-primary{background:var(--text);color:var(--bg);border-color:transparent}
+.btn-primary:hover{opacity:.9;background:var(--text)}
+.chip{font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;letter-spacing:.01em}
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;gap:12px;height:56px;flex:0 0 56px;padding:0 16px;border-bottom:.5px solid var(--border);background:var(--bg-2)}
+.chsel{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:500;padding:5px 8px;border-radius:var(--r-md)}
+.chsel:hover{background:var(--bg-3)}
+.search{flex:1;max-width:440px;display:flex;align-items:center;gap:9px;height:38px;padding:0 13px;border:.5px solid var(--border);border-radius:var(--r-md);background:var(--bg);color:var(--text-3);font-size:13px}
+.search input{flex:1;border:none;background:none;outline:none;font:inherit;color:var(--text)}
+.panes{flex:1;display:flex;min-height:0}
+.nav{flex:0 0 210px;border-right:.5px solid var(--border);overflow:auto;padding:18px 10px}
+.nav .lbl{font-size:11px;letter-spacing:.08em;color:var(--text-3);padding:0 8px 10px}
+.nav a{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--r-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;line-height:1.35;margin-bottom:1px}
+.nav a:hover{background:var(--bg-2);color:var(--text)}
+.nav a.sub{padding-left:24px;font-size:13px;color:var(--text-3)}
+.nav a.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.nav .count{margin-left:auto;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;border-radius:10px;background:var(--bg-3);color:var(--text-2);padding:0 6px}
+.nav a.active .count{background:var(--bg);color:var(--accent)}
+.read{flex:1;min-width:0;overflow:auto;position:relative}
+#doc{max-width:720px;margin:0 auto;padding:34px 28px 160px;font-size:16.5px;line-height:1.78;color:var(--text)}
+#doc h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0 0 20px}
+#doc h2{font-size:21px;font-weight:600;letter-spacing:-.005em;margin:36px 0 12px}
+#doc h3{font-size:17px;font-weight:600;margin:26px 0 8px;color:var(--text)}
+#doc p{margin:0 0 16px} #doc strong{font-weight:600}
+#doc img{max-width:100%;height:auto;display:block;margin:18px auto;border:.5px solid var(--border);border-radius:var(--r-sm)}
+#doc figure{margin:24px 0} #doc figcaption{font-size:13.5px;color:var(--text-2);margin-top:8px;text-align:center;line-height:1.5}
+#doc .references,#doc #refs{font-size:13.5px;color:var(--text-2);border-top:.5px solid var(--border);margin-top:36px;padding-top:16px}
+#doc ::selection{background:rgba(60,120,230,.22)}
+.flash{background:var(--warn-bg);border-radius:3px;transition:background .3s}
+.comments{flex:0 0 264px;border-left:.5px solid var(--border);background:var(--bg-2);overflow:auto;padding:16px 14px}
+.comments .lbl{display:flex;font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px}
+.ccard{background:var(--bg);border:.5px solid var(--border);border-radius:var(--r-md);padding:11px 12px;margin-bottom:10px;cursor:pointer}
+.ccard:hover{border-color:var(--border-2)}
+.ccard .row{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.ccard .snip{font-size:12px;font-style:italic;color:var(--text-3);margin-bottom:6px;line-height:1.4}
+.ccard .body{font-size:13.5px;line-height:1.5}
+.ccard .branch{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);margin-top:8px}
+.status{margin-left:auto;font-size:10.5px;font-weight:500;padding:1px 9px;border-radius:20px}
+.popover{position:absolute;z-index:20;width:min(560px,90%);background:var(--bg);border:.5px solid var(--accent);border-radius:var(--r-lg);padding:13px 15px;box-shadow:0 8px 30px rgba(0,0,0,.14)}
+.popover .head{display:flex;align-items:center;font-size:11.5px;color:var(--text-2)}
+.popover .loc{margin-left:auto;display:inline-flex;align-items:center;gap:5px;color:var(--success);font-weight:500}
+.popover .snip{font-style:italic;font-size:13px;color:var(--text-3);border-left:2px solid var(--border-2);padding-left:10px;margin:9px 0}
+.popover .tags{display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap}
+.popover .tags button{font-size:11.5px;padding:3px 11px;border-radius:20px;border:.5px solid var(--border);color:var(--text-2)}
+.popover .tags button.on{border-color:transparent}
+.popover textarea{width:100%;border:.5px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font:inherit;background:var(--bg);color:var(--text);resize:vertical;min-height:46px;outline:none}
+.popover textarea:focus{border-color:var(--accent)}
+.empty{max-width:440px;margin:16vh auto;text-align:center;color:var(--text-2)}
+.katex{font-size:1.02em}
+</style>
 </head>
 <body>
-<div id="app">
-  <header id="topbar"></header>
-  <main id="panes" style="display:flex;min-height:calc(100vh - 49px)">
-    <nav id="nav-pane"></nav>
-    <section id="read-pane" style="flex:1;min-width:0"></section>
-    <aside id="comments-pane"></aside>
-  </main>
+<div class="app">
+  <header class="topbar" id="topbar"></header>
+  <div class="panes">
+    <nav class="nav" id="nav"></nav>
+    <section class="read" id="read"></section>
+    <aside class="comments" id="comments"></aside>
+  </div>
 </div>
 <script type="module" src="./js/app.js"></script>
 </body>
