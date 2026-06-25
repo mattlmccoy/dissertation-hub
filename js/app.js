@@ -167,13 +167,29 @@ document.getElementById('pdf-file').addEventListener('change', async e => {
   else renderPdf(await f.arrayBuffer());
 });
 
+function renderEmptyState(){
+  readPane.innerHTML =
+    `<div style="max-width:440px;margin:16vh auto;text-align:center;padding:30px;border:.5px dashed var(--border-2);border-radius:var(--r-lg)">
+       <div style="font-size:17px;font-weight:500;margin-bottom:6px">Open a chapter to review</div>
+       <div style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6">Pick a generated chapter <code>.html</code> (or a compiled <code>.pdf</code>), or drag the file anywhere onto this pane.</div>
+       <button id="empty-open" style="padding:8px 16px">Open chapter…</button>
+     </div>`;
+  document.getElementById('empty-open').onclick = () => document.getElementById('pdf-file').click();
+}
 async function loadChapterHtml(ch){
   try {
     const r = await fetch(`./chapters/${ch}.html`);
     if (!r.ok) throw new Error(r.status);
     renderHtml(await r.text());
   } catch (e){
-    readPane.innerHTML = `<div style="max-width:640px;margin:60px auto;color:var(--text-2)">Could not load <code>chapters/${ch}.html</code> (${e}). Use <b>Open</b> to pick a generated chapter HTML or PDF.</div>`;
+    renderEmptyState();   // expected on the public site: chapter content stays local, loaded via Open/drop
   }
 }
+readPane.addEventListener('dragover', e => { e.preventDefault(); });
+readPane.addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  if (f.name.endsWith('.html')) renderHtml(await f.text());
+  else if (f.name.endsWith('.pdf')) renderPdf(await f.arrayBuffer());
+});
 loadChapterHtml(currentChapter);
