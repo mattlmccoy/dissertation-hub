@@ -131,6 +131,25 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 .pmodes button{flex:1;padding:4px 6px;border-radius:5px;font-size:11.5px;color:var(--text-2)}
 .pmodes button.on{background:var(--bg);color:var(--text);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .popover textarea.crepl{width:100%;border:.5px solid var(--suggest);border-radius:var(--r-sm);padding:8px 10px;font:inherit;background:var(--bg);color:var(--text);resize:vertical;min-height:44px;outline:none;margin-bottom:8px}
+/* inbox / triage panel on the home screen */
+.ibx{border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px 18px;margin-bottom:26px}
+.ibx-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:13px}
+.ibx-head i{font-size:18px;color:var(--accent)}
+.ibx-empty{font-size:12.5px;color:var(--text-3)}
+.ibx-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:15px}
+.ibx-chip{display:inline-flex;align-items:center;gap:6px;border:.5px solid var(--c);color:var(--text);background:color-mix(in srgb,var(--c) 9%,transparent);border-radius:20px;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer}
+.ibx-chip:hover{background:color-mix(in srgb,var(--c) 18%,transparent)} .ibx-chip i{color:var(--c);font-size:15px} .ibx-chip b{font-weight:650}
+.mxgrid{display:flex;flex-direction:column;gap:1px}
+.mxrow{display:grid;grid-template-columns:1fr 56px 56px 56px 56px;align-items:center;gap:4px}
+.mxrow.mxhead .mx{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;cursor:default;background:none;border:none}
+.mxname{text-align:left;background:none;border:none;color:var(--text-2);font:inherit;font-size:12.5px;padding:5px 2px;cursor:pointer}
+.mxname:hover{color:var(--accent)}
+.mx{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;height:26px;border-radius:6px;border:none;font-family:inherit;cursor:pointer}
+.mx0{color:var(--bg-3,#ccc);cursor:default;font-weight:400}
+.mxopen{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent)}
+.mxstaged{background:var(--info-bg);color:var(--info)}
+.mxadv{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent)}
+.mxmerged{background:var(--success-bg);color:var(--success)}
 /* resolved/merged comments — collapsed group */
 .resolved-grp{margin-top:10px;border-top:.5px solid var(--border)}
 .resolved-head{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;cursor:pointer;padding:9px 2px 7px;color:var(--text-3);font:inherit;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}

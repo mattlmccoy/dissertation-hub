@@ -1,6 +1,6 @@
 import { newReview, addComment, updateComment, deleteComment } from './model.js';
 import { anchorFromSelection } from './anchor.js';
-import { reviewPath, mergeReview, getJson, putJson } from './gh.js';
+import { reviewPath, mergeReview, getJson, putJson, ghTree } from './gh.js';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
@@ -714,6 +714,68 @@ function enterHome(){
   document.getElementById('btn-releases').onclick = openReleasePanel;
   read.innerHTML = homeHtml();
   read.querySelectorAll('[data-ch]').forEach(el => el.onclick = () => enterChapter(el.dataset.ch));
+  refreshInbox();
+}
+// ---------- inbox / triage: aggregate everything that needs the owner across all chapters ----------
+async function gatherInbox(t){
+  const paths = await ghTree(t);
+  const has = p => paths.includes(p);
+  const jr = await getJson(t, 'jobs.json').catch(() => ({ json:null }));
+  const jobs = Array.isArray(jr.json) ? jr.json : [];
+  const chData = await Promise.all(CHAPTERS.map(async c => {
+    const p = `reviews/${c.id}.json`;
+    const r = has(p) ? await getJson(t, p).catch(() => ({ json:null })) : { json:null };
+    const cs = r.json?.comments || [];
+    return { ch:c.id, n:c.n, title:c.title,
+      open: cs.filter(x => x.status==='open').length,
+      staged: cs.filter(x => x.status==='staged' || x.status==='approved').length,
+      merged: cs.filter(x => x.status==='merged').length, total: cs.length };
+  }));
+  const advFiles = paths.filter(p => /^advisor\/[^/]+\/[^/]+\.json$/.test(p));
+  const advRaw = await Promise.all(advFiles.map(async p => {
+    const m = p.match(/^advisor\/([^/]+)\/(.+)\.json$/);
+    const r = await getJson(t, p).catch(() => ({ json:null }));
+    const fresh = (r.json?.comments || []).filter(x => x.status==='submitted' && !x.resolution);
+    return fresh.length ? { advisor:m[1], ch:m[2], count:fresh.length } : null;
+  }));
+  return { jobs, chData, adv: advRaw.filter(Boolean) };
+}
+async function refreshInbox(){
+  const panel = document.getElementById('inbox-panel'); if (!panel) return;
+  const t = tok(); if (!t){ panel.style.display = 'none'; return; }
+  try { renderInbox(panel, await gatherInbox(t)); }
+  catch(e){ panel.innerHTML = `<div class="ibx-empty">Couldn't load triage (${escapeHtml(e.message)}).</div>`; }
+}
+function renderInbox(panel, { jobs, chData, adv }){
+  const advByCh = {}; adv.forEach(a => { advByCh[a.ch] = (advByCh[a.ch]||0) + a.count; });
+  const stagedTotal = chData.reduce((s,c) => s + c.staged, 0);
+  const advTotal = adv.reduce((s,a) => s + a.count, 0);
+  const queued = jobs.filter(j => j.status==='queued').length;
+  const running = jobs.filter(j => j.status==='running').length;
+  const firstStaged = chData.find(c => c.staged);
+  const firstAdv = adv[0];
+  const chip = (icon, n, label, color, ch) => n
+    ? `<button class="ibx-chip" ${ch?`data-ch="${ch}"`:''} style="--c:${color}"><i class="ti ti-${icon}"></i><b>${n}</b> ${label}</button>` : '';
+  const chips = [
+    chip('git-pull-request', stagedTotal, 'staged to approve', 'var(--info)', firstStaged?.ch),
+    chip('user-exclamation', advTotal, 'new advisor comment'+(advTotal!==1?'s':''), 'var(--accent)', firstAdv?.ch),
+    chip('clock-play', queued+running, 'Claude job'+(queued+running!==1?'s':'')+' running', 'var(--warn)'),
+  ].filter(Boolean).join('');
+  const cell = (n, cls, ch) => n
+    ? `<button class="mx ${cls}" data-ch="${ch}">${n}</button>` : `<span class="mx mx0">·</span>`;
+  const rows = chData.map(c => `<div class="mxrow">
+      <button class="mxname" data-ch="${c.ch}">Ch ${c.n}</button>
+      ${cell(c.open,'mxopen',c.ch)}${cell(c.staged,'mxstaged',c.ch)}${advByCh[c.ch]?`<button class="mx mxadv" data-ch="${c.ch}">${advByCh[c.ch]}</button>`:'<span class="mx mx0">·</span>'}${cell(c.merged,'mxmerged',c.ch)}
+    </div>`).join('');
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="ibx-head"><i class="ti ti-inbox"></i>Needs you${(stagedTotal||advTotal||queued||running)?'':' — all clear ✓'}</div>
+    ${chips ? `<div class="ibx-chips">${chips}</div>` : ''}
+    <div class="mxgrid">
+      <div class="mxrow mxhead"><span class="mxname"></span><span class="mx">open</span><span class="mx">staged</span><span class="mx">advisor</span><span class="mx">merged</span></div>
+      ${rows}
+    </div>`;
+  panel.querySelectorAll('[data-ch]').forEach(el => el.onclick = () => enterChapter(el.dataset.ch));
 }
 function homeHtml(){
   const last = localStorage.getItem('lastChapter');
@@ -741,6 +803,7 @@ function homeHtml(){
   }).join('');
   return `<div style="max-width:900px;margin:0 auto;padding:28px 24px 90px">
       ${cont}
+      <div id="inbox-panel" class="ibx" style="display:none"></div>
       <div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">ALL CHAPTERS</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div></div>`;
 }

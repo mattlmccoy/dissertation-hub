@@ -11,6 +11,12 @@ export const mergeReview = (local, remote) => {
 };
 const API='https://api.github.com', OWNER='mattlmccoy', REPO='dissertation-tracker-data';
 const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.github+json' });
+// one call to list every file path in the data repo (so the inbox only fetches files that exist)
+export async function ghTree(tok){
+  const r = await fetch(`${API}/repos/${OWNER}/${REPO}/git/trees/main?recursive=1&t=${Date.now()}`, { headers:hdr(tok), cache:'no-store' });
+  if (!r.ok) throw new Error('GitHub tree '+r.status);
+  const d = await r.json(); return (d.tree||[]).filter(x => x.type==='blob').map(x => x.path);
+}
 export async function getJson(tok, path){
   const r = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}?t=${Date.now()}`, { headers:hdr(tok), cache:'no-store' });
   if (r.status===404) return { json:null, sha:null };
