@@ -834,6 +834,7 @@ function enterHome(){
   document.getElementById('topbar').innerHTML =
     `<strong style="font-size:16px;font-weight:600">Dissertation Reviewer</strong>
      <span style="margin-left:auto;font-size:12.5px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px"><i class="ti ti-flag"></i>defense in ${daysToDefense()} days</span>
+     <button class="btn" id="btn-outline" style="padding:6px 12px" title="Proposed outline (what advisors see)"><i class="ti ti-list-tree"></i>Outline</button>
      <button class="btn" id="btn-export" style="padding:6px 12px" title="Printable response to advisor comments"><i class="ti ti-file-text"></i>Response</button>
      <button class="btn" id="btn-releases" style="padding:6px 12px"><i class="ti ti-users"></i>Advisor releases</button>
      <a class="icbtn" href="./index.html" title="Back to dashboard"><i class="ti ti-layout-dashboard"></i></a>
@@ -841,9 +842,43 @@ function enterHome(){
   document.getElementById('btn-theme').onclick = toggleTheme;
   document.getElementById('btn-releases').onclick = openReleasePanel;
   document.getElementById('btn-export').onclick = exportAdvisorResponse;
+  document.getElementById('btn-outline').onclick = loadOwnerOutline;
   read.innerHTML = homeHtml();
   read.querySelectorAll('[data-ch]').forEach(el => el.onclick = () => enterChapter(el.dataset.ch));
   refreshInbox();
+}
+// ---------- proposed outline (read-only view of what advisors see) ----------
+async function loadOwnerOutline(){
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('comments').style.display = 'none';
+  document.getElementById('topbar').innerHTML = `<button class="icbtn" id="ol-back" title="Home"><i class="ti ti-arrow-left"></i></button>
+    <strong style="font-size:15px;font-weight:600;margin-left:4px">Proposed outline</strong>
+    <button class="icbtn" id="btn-theme" style="margin-left:auto"><i class="ti ti-moon"></i></button>`;
+  document.getElementById('ol-back').onclick = enterHome;
+  document.getElementById('btn-theme').onclick = toggleTheme;
+  read.innerHTML = `<div class="empty">Loading outline…</div>`;
+  let data = null; const dev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  try {
+    if (dev){ const r = await fetch('./outline.json'); if (r.ok) data = await r.json(); }
+    if (!data){ const t = tok(); if (t){ const got = await getJson(t, 'outline.json'); data = got.json; } }
+  } catch(e){}
+  if (!data){ read.innerHTML = `<div class="empty">Couldn't load the outline. Open a chapter once to connect your token, then retry.</div>`; return; }
+  renderOwnerOutline(data);
+}
+function renderOwnerOutline(data){
+  const chapters = data.chapters.map(ch => {
+    const secs = (ch.sections||[]).map(s => {
+      const subs = (s.subsections||[]).map(ss => `<div class="ol-node ol-sub"><div class="ol-srow"><span class="ol-slabel">${escapeHtml(ss.title)}</span>${ss.synopsis?`<span class="ol-syn">${escapeHtml(ss.synopsis)}</span>`:''}</div></div>`).join('');
+      return `<div class="ol-node ol-sec"><div class="ol-srow"><span class="ol-slabel">${escapeHtml(s.title)}</span>${s.synopsis?`<span class="ol-syn">${escapeHtml(s.synopsis)}</span>`:''}</div></div>${subs}`;
+    }).join('');
+    return `<div class="ol-chapter open"><div class="ol-chead" data-toggle><i class="ti ti-chevron-right ol-chev"></i><span class="ol-cn">${ch.n}</span>
+        <div style="min-width:0;flex:1"><div class="ol-ctitle">${escapeHtml(ch.title)}</div>${ch.synopsis?`<div class="ol-csyn">${escapeHtml(ch.synopsis)}</div>`:''}</div></div>
+      <div class="ol-sections">${secs}</div></div>`;
+  }).join('');
+  read.innerHTML = `<div class="ol-wrap"><h1 class="ol-h1">${escapeHtml(data.title||'Proposed outline')}</h1>
+    <p class="ol-intro">${escapeHtml(data.intro||'')}</p>
+    <div style="font-size:11.5px;color:var(--text-3);margin-bottom:16px">This is exactly what advisors see and comment on. Their outline comments land in your inbox and the Advisor releases panel. Edit the structure by updating <code>outline.json</code>.</div>${chapters}</div>`;
+  read.querySelectorAll('[data-toggle]').forEach(h => h.onclick = () => h.closest('.ol-chapter').classList.toggle('open'));
 }
 // ---------- inbox / triage: aggregate everything that needs the owner across all chapters ----------
 async function gatherInbox(t){

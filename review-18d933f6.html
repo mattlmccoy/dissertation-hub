@@ -131,6 +131,21 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 .pmodes button{flex:1;padding:4px 6px;border-radius:5px;font-size:11.5px;color:var(--text-2)}
 .pmodes button.on{background:var(--bg);color:var(--text);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .popover textarea.crepl{width:100%;border:.5px solid var(--suggest);border-radius:var(--r-sm);padding:8px 10px;font:inherit;background:var(--bg);color:var(--text);resize:vertical;min-height:44px;outline:none;margin-bottom:8px}
+/* proposed outline (read-only, owner) */
+.ol-wrap{max-width:760px;margin:0 auto;padding:30px 26px 90px}
+.ol-h1{font-size:24px;font-weight:600;margin:0 0 8px}
+.ol-intro{font-size:13.5px;line-height:1.6;color:var(--text-2);margin:0 0 14px}
+.ol-chapter{border:.5px solid var(--border);border-radius:var(--r-md);margin-bottom:10px;overflow:hidden}
+.ol-chead{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;cursor:pointer} .ol-chead:hover{background:var(--bg-2)}
+.ol-chev{font-size:17px;color:var(--text-3);transition:transform .15s;flex:0 0 auto;margin-top:1px} .ol-chapter.open .ol-chev{transform:rotate(90deg)}
+.ol-cn{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;margin-top:1px}
+.ol-ctitle{font-size:14.5px;font-weight:500;line-height:1.35} .ol-csyn{font-size:12px;color:var(--text-3);margin-top:2px;line-height:1.4}
+.ol-sections{display:none;padding:0 15px 6px 48px} .ol-chapter.open .ol-sections{display:block}
+.ol-node{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:.5px solid var(--border)}
+.ol-node.ol-sec{position:relative}
+.ol-node.ol-sub{padding-left:18px;border-top:none;padding-top:3px;padding-bottom:3px}
+.ol-node.ol-sub .ol-slabel{font-size:12.5px;color:var(--text-2)}
+.ol-srow{flex:1;min-width:0} .ol-slabel{font-size:13px;color:var(--text)} .ol-syn{display:block;font-size:11.5px;color:var(--text-3);margin-top:1px;line-height:1.4}
 /* chapter history — old-vs-new diff */
 .hdiff{border:.5px solid var(--border);border-radius:var(--r-md);overflow:hidden;font-size:13px;line-height:1.55}
 .hdiff > div{padding:2px 12px}

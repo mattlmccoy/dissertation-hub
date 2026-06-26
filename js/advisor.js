@@ -377,16 +377,20 @@ function renderOutlineTopbar(){
   document.getElementById('btn-key').onclick=()=>{ const v=prompt('Access key:',tok()||''); if(v!==null){ if(v.trim()) localStorage.setItem('ghpat',v.trim()); else localStorage.removeItem('ghpat'); boot(); } };
 }
 function renderOutline(data){
-  const cnt=label=>review.comments.filter(c=>c.anchor?.quote===label).length;
+  const cnt=(label,sec)=>review.comments.filter(c=>c.anchor?.quote===label && c.anchor?.section===sec).length;
   const badge=n=>n?`<i class="ti ti-message"></i>${n}`:`<i class="ti ti-message-plus"></i>`;
+  const node=(title, synopsis, sec, cls)=>`<div class="ol-node ${cls}">
+      <div class="ol-srow"><span class="ol-slabel">${escapeHtml(title)}</span>${synopsis?`<span class="ol-syn">${escapeHtml(synopsis)}</span>`:''}</div>
+      <button class="ol-cmt" data-node="${escapeHtml(title)}" data-sec="${escapeHtml(sec)}">${badge(cnt(title, sec))}</button></div>`;
   const chapters=data.chapters.map(ch=>{
-    const secs=(ch.sections||[]).map(s=>`<div class="ol-node">
-        <div class="ol-srow"><span class="ol-slabel">${escapeHtml(s.title)}</span>${s.synopsis?`<span class="ol-syn">${escapeHtml(s.synopsis)}</span>`:''}</div>
-        <button class="ol-cmt" data-node="${escapeHtml(s.title)}" data-sec="${escapeHtml(ch.title)}">${badge(cnt(s.title))}</button></div>`).join('');
+    const secs=(ch.sections||[]).map(s=>{
+      const subs=(s.subsections||[]).map(ss=>node(ss.title, ss.synopsis, ch.title, 'ol-sub')).join('');
+      return node(s.title, s.synopsis, ch.title, 'ol-sec')+subs;
+    }).join('');
     return `<div class="ol-chapter">
       <div class="ol-chead" data-toggle><i class="ti ti-chevron-right ol-chev"></i><span class="ol-cn">${ch.n}</span>
         <div style="min-width:0;flex:1"><div class="ol-ctitle">${escapeHtml(ch.title)}</div>${ch.synopsis?`<div class="ol-csyn">${escapeHtml(ch.synopsis)}</div>`:''}</div>
-        <button class="ol-cmt" data-node="${escapeHtml(ch.title)}" data-sec="${escapeHtml(ch.title)}">${badge(cnt(ch.title))}</button></div>
+        <button class="ol-cmt" data-node="${escapeHtml(ch.title)}" data-sec="${escapeHtml(ch.title)}">${badge(cnt(ch.title, ch.title))}</button></div>
       <div class="ol-sections">${secs}</div></div>`;
   }).join('');
   read.innerHTML=`<div class="ol-wrap"><h1 class="ol-h1">${escapeHtml(data.title||'Proposed outline')}</h1>
@@ -404,7 +408,7 @@ function outlineComment(btn, label, section){
   box.querySelector('.ol-save').onclick=()=>{ const v=box.querySelector('textarea').value.trim(); if(!v) return;
     review=addComment(review,{ anchor:{quote:label, section}, kind:'text', tag:'suggestion', body:v, author:ADVISOR.id });
     save(); syncUpSoon(); box.remove();
-    const n=review.comments.filter(c=>c.anchor?.quote===label).length; btn.innerHTML=`<i class="ti ti-message"></i>${n}`;
+    const n=review.comments.filter(c=>c.anchor?.quote===label && c.anchor?.section===section).length; btn.innerHTML=`<i class="ti ti-message"></i>${n}`;
     renderComments(); flash('Comment added — use Submit comments when finished.'); };
 }
 async function submitComments(){ const t=tok(); if(!t){ flash('Add your access key first.'); return; } const open=review.comments.filter(c=>c.status==='open'); if(!open.length){ flash('No new comments to submit.'); return; }
