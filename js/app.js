@@ -16,6 +16,9 @@ const CHAPTERS = [
 ];
 const chMeta = id => CHAPTERS.find(c => c.id === id) || (id === '__outline__' ? { n:'·', title:'Proposed outline' } : { n:'?', title:id });
 const TAGS = ['claim','wording','figure','citation','question'];
+// platform-adaptive modifier label (handlers accept ⌘ or Ctrl; this is just the on-screen text)
+const IS_MAC = /Mac|iPhone|iPad/.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''));
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 
 const read = document.getElementById('read');
 let current = 'ch_modeling';
@@ -46,7 +49,7 @@ function renderTopbar(){
   document.getElementById('topbar').innerHTML = `
     <button class="icbtn" id="btn-home" title="All chapters"><i class="ti ti-layout-grid"></i></button>
     <button class="chsel" id="chsel"><i class="ti ti-book-2"></i><span>Chapter ${m.n} · ${shortTitle(m.title)}</span><i class="ti ti-chevron-down" style="font-size:15px;color:var(--text-3)"></i></button>
-    <div class="search"><i class="ti ti-search"></i><input id="search" placeholder="Search chapter · ⌘\\ for all"></div>
+    <div class="search"><i class="ti ti-search"></i><input id="search" placeholder="Search chapter · ${MOD}\\ for all"></div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:3px">
       <button class="icbtn" id="btn-focus" title="Focus mode (f)"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
       <button class="icbtn" id="btn-history" title="History"><i class="ti ti-history"></i></button>
@@ -395,7 +398,7 @@ function showPopover(anchor, rects, defaultTag='claim', figEl=null){
     ${isFig && figEl ? `<button class="btn figdraw-btn" id="figdraw"><i class="ti ti-pencil"></i>Draw on the figure</button>` : ''}
     <textarea id="crepl" class="crepl" style="display:none"></textarea>
     <div class="tags" id="tags"></div>
-    <textarea id="cbody" placeholder="Leave a comment…  (1–5 to tag · ⌘↵ to save)"></textarea>
+    <textarea id="cbody" placeholder="Leave a comment…  (1–5 to tag · ${MOD}↵ to save)"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
   read.appendChild(pop);
   let tag = defaultTag, mode = 'note'; const tr = pop.querySelector('#tags');
@@ -409,7 +412,7 @@ function showPopover(anchor, rects, defaultTag='claim', figEl=null){
     const needsRepl = m === 'replace' || m === 'insert';
     repl.style.display = needsRepl ? 'block' : 'none';
     repl.placeholder = m === 'replace' ? 'Exact replacement text (verbatim)…' : 'Exact text to insert after the selection (verbatim)…';
-    body.placeholder = m === 'note' ? 'Leave a comment…  (1–5 to tag · ⌘↵ to save)' : 'Optional note for this edit…';
+    body.placeholder = m === 'note' ? `Leave a comment…  (1–5 to tag · ${MOD}↵ to save)` : 'Optional note for this edit…';
     saveBtn.textContent = m === 'note' ? 'Comment' : m === 'delete' ? 'Suggest deletion' : m === 'insert' ? 'Suggest insertion' : 'Suggest replacement';
     saveBtn.className = 'btn ' + (m === 'delete' ? 'btn-danger' : m === 'note' ? 'btn-primary' : 'btn-suggest');
     pop.querySelector('#psnip').style.textDecoration = m === 'delete' ? 'line-through' : 'none';
@@ -1191,11 +1194,11 @@ function cycleComment(dir){
   const c = list[i]; activeCommentId = c.id; renderComments(); jumpTo(c);
   document.querySelector(`#comments .ccard[data-id="${c.id}"]`)?.scrollIntoView({ block:'nearest' });
 }
-const SHORTCUTS = [['j / k','next / previous comment'],['↵ on a comment','jump to its place in the text'],['f','focus (distraction-free) mode'],['[ / ]','collapse left nav / comments rail'],['/','search this chapter'],['⌘\\','search the whole dissertation'],['⌘↵','open the Send to Claude menu'],['⌥1–5 (in popover)','pick a tag'],['Esc','close popover / overlay'],['?','show this help']];
+const SHORTCUTS = [['j / k','next / previous comment'],['↵ on a comment','jump to its place in the text'],['f','focus (distraction-free) mode'],['[ / ]','collapse left nav / comments rail'],['/','search this chapter'],[`${MOD}\\`,'search the whole dissertation'],[`${MOD}↵`,'open the Send to Claude menu'],['⌥1–5 (in popover)','pick a tag'],['Esc','close popover / overlay'],['?','show this help']];
 const BUTTONS = [
   ['ti-layout-grid','Home — the chapter library'],
   ['ti-book-2','Chapter switcher'],
-  ['ti-search','Search this chapter (⌘\\ = whole dissertation)'],
+  ['ti-search',`Search this chapter (${MOD}\\ = whole dissertation)`],
   ['ti-arrows-diagonal-minimize-2','Focus mode — hide both side panes'],
   ['ti-history','Version history & diffs for this chapter'],
   ['ti-moon','Light / dark theme'],
