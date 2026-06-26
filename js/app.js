@@ -125,10 +125,16 @@ function sectionNumberMap(doc){
   doc.querySelectorAll('h2, h3').forEach(h => { if (h.tagName==='H2'){ h2++; h3 = 0; map[`${n}.${h2}`] = h; } else { h3++; map[`${n}.${h2}.${h3}`] = h; } });
   return map;
 }
-function figTableMaps(doc){   // figures/tables number per chapter in appearance order (matches LaTeX)
-  const n = chMeta(current).n; const fig = {}, tab = {}; let fi = 0, ti = 0;
-  doc.querySelectorAll('figure').forEach(f => { fig[`${n}.${++fi}`] = f; });
-  doc.querySelectorAll('table').forEach(t => { tab[`${n}.${++ti}`] = t.closest('figure') || t; });
+function figTableMaps(doc){   // read the real number from the numbered caption (robust to pandoc's nested subfigures)
+  const fig = {}, tab = {};
+  doc.querySelectorAll('figure').forEach(f => {
+    const m = (f.querySelector(':scope > figcaption')?.textContent || '').match(/^\s*Figure\s+(\d+(?:\.\d+)*)\./);
+    if (m) fig[m[1]] = f;
+  });
+  doc.querySelectorAll('table caption, figcaption').forEach(c => {
+    const m = c.textContent.match(/^\s*Table\s+(\d+(?:\.\d+)*)\./);
+    if (m) tab[m[1]] = c.closest('figure') || c.closest('table') || c;
+  });
   return { fig, tab };
 }
 function linkCrossRefs(doc){
