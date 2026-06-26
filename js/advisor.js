@@ -97,7 +97,7 @@ function renderDoc(fragment){
   if (review.cursor?.sec) document.getElementById(review.cursor.sec)?.scrollIntoView();
   syncDown();
 }
-const SIUNITX = { henry:'H',farad:'F',ohm:'\\Omega',siemens:'S',volt:'V',watt:'W',ampere:'A',kelvin:'K',hertz:'Hz',joule:'J',newton:'N',pascal:'Pa',metre:'m',meter:'m',gram:'g',mole:'mol',tesla:'T',weber:'Wb',coulomb:'C',radian:'rad',decibel:'dB',percent:'\\%',degree:'^\\circ',nano:'n',micro:'\\mu',milli:'m',pico:'p',femto:'f',kilo:'k',mega:'M',giga:'G',centi:'c',deci:'d' };
+const SIUNITX = { henry:'H',farad:'F',ohm:'\\Omega',siemens:'S',volt:'V',watt:'W',ampere:'A',kelvin:'K',hertz:'Hz',joule:'J',newton:'N',pascal:'Pa',metre:'m',meter:'m',gram:'g',mole:'mol',tesla:'T',weber:'Wb',coulomb:'C',radian:'rad',decibel:'dB',inch:'in',poise:'P',percent:'\\%',degree:'^\\circ',nano:'n',micro:'\\mu',milli:'m',pico:'p',femto:'f',kilo:'k',mega:'M',giga:'G',centi:'c',deci:'d' };
 function expandUnits(tex){ return tex.replace(/\\degreeCelsius\b/g,'{}^\\circ\\mathrm{C}').replace(/\\([a-zA-Z]+)\b/g,(m,name)=>{ if(!(name in SIUNITX)) return m; const v=SIUNITX[name]; return /^[A-Za-z]+$/.test(v)?`\\mathrm{${v}}`:v; }); }
 function runKatex(el){ if(!window.katex){ setTimeout(()=>runKatex(el),100); return; }
   el.querySelectorAll('span.math').forEach(s=>{ const tex=expandUnits(s.textContent.replace(/\\label\{[^}]*\}/g,'')); try{ window.katex.render(tex,s,{displayMode:s.classList.contains('display'),throwOnError:false}); }catch(e){} }); }

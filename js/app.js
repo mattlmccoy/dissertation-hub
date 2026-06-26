@@ -216,6 +216,7 @@ const SIUNITX = {
   hertz:'Hz', joule:'J', newton:'N', pascal:'Pa', metre:'m', meter:'m', gram:'g',
   mole:'mol', tesla:'T', weber:'Wb', coulomb:'C', radian:'rad', steradian:'sr', lumen:'lm',
   candela:'cd', becquerel:'Bq', sievert:'Sv', katal:'kat', decibel:'dB',
+  inch:'in', poise:'P',   // project-declared custom siunitx units (\bar deliberately omitted — collides with KaTeX \bar accent)
   percent:'\\%', degree:'^\\circ', arcminute:"'", arcsecond:"''",
   nano:'n', micro:'\\mu', milli:'m', pico:'p', femto:'f', kilo:'k', mega:'M', giga:'G',
   centi:'c', deci:'d', deca:'da', hecto:'h', atto:'a',
