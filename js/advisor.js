@@ -196,10 +196,13 @@ function headingFor(node){ let el=node.nodeType===1?node:node.parentElement; whi
 
 // ---------- select-to-comment + suggest-edit ----------
 let pending=null;
-read.addEventListener('mouseup',()=>{ if(document.getElementById('pop')) return; const sel=window.getSelection(); const text=sel.toString();
+function selToPopover(){ if(document.getElementById('pop')) return; const sel=window.getSelection(); const text=sel.toString();
   if(!text.trim()||sel.rangeCount===0) return; const range=sel.getRangeAt(0); if(!range.startContainer.parentElement?.closest('#doc')) return;
   const rr=read.getBoundingClientRect(); const rects=[...range.getClientRects()].map(r=>({x:r.x-rr.x,y:r.y-rr.y+read.scrollTop,w:r.width,h:r.height}));
-  pending=anchorFromSelection({text,page:null,rects}); pending.section=headingFor(range.startContainer); showPopover(pending,rects); });
+  pending=anchorFromSelection({text,page:null,rects}); pending.section=headingFor(range.startContainer); showPopover(pending,rects);
+  if(window.innerWidth<=700) document.body.classList.add('sheet-open'); }
+read.addEventListener('mouseup', selToPopover);
+read.addEventListener('touchend', ()=>setTimeout(selToPopover,10));
 function showPopover(anchor,rects,defaultTag='wording'){
   document.getElementById('pop')?.remove(); const top=Math.max(...rects.map(r=>r.y+r.h))+10; const isFig=anchor.kind==='figure';
   const pop=document.createElement('div'); pop.id='pop'; pop.className='popover'; pop.style.top=top+'px'; pop.style.left='50%'; pop.style.transform='translateX(-50%)';
@@ -346,8 +349,15 @@ function runSearch(q){ clearSearch(); if(!q.trim()) return; const re=new RegExp(
 function clearSearch(){ document.querySelectorAll('#doc mark:not(.cmark)').forEach(m=>m.replaceWith(...m.childNodes)); }
 function flash(msg){ const t=document.createElement('div'); t.textContent=msg; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.2)'; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 
+// ---------- mobile: comments rail as a bottom sheet ----------
+function setupMobileSheet(){
+  const back=document.createElement('div'); back.id='sheetbackdrop'; back.onclick=()=>document.body.classList.remove('sheet-open');
+  const fab=document.createElement('button'); fab.id='sheetfab'; fab.innerHTML='<i class="ti ti-message-circle"></i>'; fab.onclick=()=>document.body.classList.toggle('sheet-open');
+  document.body.append(back, fab);
+}
 // ---------- boot ----------
 async function boot(){ keyBad = false; await loadRelease(); if (keyBad && tok()){ showKeyExpired(); return; } enterHome(); }
+setupMobileSheet();
 window.addEventListener('keydown',e=>{ const pop=document.getElementById('pop'); if(pop){ if(e.key==='Escape') pop.querySelector('#ccancel').click(); return; }
   if(/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')) return; if(e.key==='/'){ e.preventDefault(); document.getElementById('search')?.focus(); } });
 boot();

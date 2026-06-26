@@ -325,7 +325,7 @@ function buildNav(){
 
 // ---------- select-to-comment ----------
 let pending = null;
-read.addEventListener('mouseup', () => {
+function selToPopover(){
   if (document.getElementById('pop')) return;
   const sel = window.getSelection(); const text = sel.toString();
   if (!text.trim() || sel.rangeCount === 0) return;
@@ -336,7 +336,10 @@ read.addEventListener('mouseup', () => {
   pending = anchorFromSelection({ text, page:null, rects });
   pending.section = headingFor(range.startContainer);
   showPopover(pending, rects);
-});
+  if (window.innerWidth <= 700) document.body.classList.add('sheet-open');   // surface the rail on mobile
+}
+read.addEventListener('mouseup', selToPopover);
+read.addEventListener('touchend', () => setTimeout(selToPopover, 10));   // touch selection on mobile
 function headingFor(node){
   let el = node.nodeType === 1 ? node : node.parentElement;
   while (el && el.id !== 'doc'){ let p = el.previousElementSibling;
@@ -1234,7 +1237,16 @@ window.addEventListener('keydown', e => {
   }
 });
 
+// ---------- mobile: comments rail as a bottom sheet ----------
+function setupMobileSheet(){
+  const back = document.createElement('div'); back.id = 'sheetbackdrop';
+  back.onclick = () => document.body.classList.remove('sheet-open');
+  const fab = document.createElement('button'); fab.id = 'sheetfab'; fab.innerHTML = '<i class="ti ti-message-circle"></i>';
+  fab.onclick = () => document.body.classList.toggle('sheet-open');
+  document.body.append(back, fab);
+}
 // ---------- boot ----------
+setupMobileSheet();
 enterHome();
 document.addEventListener('mouseover', e => { const c = e.target.closest?.('.chcard'); if (c) c.style.borderColor='var(--border-2)'; });
 document.addEventListener('mouseout', e => { const c = e.target.closest?.('.chcard'); if (c) c.style.borderColor='var(--border)'; });

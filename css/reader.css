@@ -142,6 +142,20 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 /* focus mode */
 body.focusmode .nav,body.focusmode .comments{display:none!important}
 body.focusmode #doc{max-width:760px}
+/* mobile: bottom-sheet comments, drawer nav, bigger tap targets */
+#sheetfab,#sheetbackdrop{display:none}
+@media (max-width:700px){
+  .nav{position:fixed;top:0;left:0;bottom:0;width:84vw;max-width:300px;z-index:45;background:var(--bg);box-shadow:2px 0 24px rgba(0,0,0,.25);transform:translateX(-100%);transition:transform .2s;flex:none;padding-top:58px}
+  body.nav-open .nav{transform:none}
+  .comments{position:fixed;left:0;right:0;bottom:0;top:auto;flex:none;height:76vh;border-left:none;border-top:.5px solid var(--border);border-radius:18px 18px 0 0;box-shadow:0 -10px 36px rgba(0,0,0,.22);z-index:46;transform:translateY(100%);transition:transform .24s}
+  body.sheet-open .comments{transform:none}
+  #sheetbackdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:44} body.sheet-open #sheetbackdrop{display:block}
+  #sheetfab{display:flex;position:fixed;right:16px;bottom:18px;z-index:47;width:50px;height:50px;border-radius:50%;border:none;background:var(--accent);color:#fff;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer} #sheetfab i{font-size:22px}
+  body.sheet-open #sheetfab{display:none}
+  .btn,.icbtn{min-height:38px} .nav a{padding:10px 9px}
+  .popover{left:8px!important;right:8px!important;transform:none!important;width:auto}
+  .whatsnew{max-width:none}
+}
 /* help overlay */
 #helpov{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center}
 .help-card{background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-lg);padding:20px 22px;width:min(440px,92%);box-shadow:0 20px 60px rgba(0,0,0,.28)}
