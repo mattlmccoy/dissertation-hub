@@ -139,10 +139,29 @@ function wireFigures(doc){
     });
   });
 }
+// siunitx unit/prefix macros KaTeX doesn't know — expand to upright text so e.g. 119\,n\henry → 119 nH.
+// Names that collide with real KaTeX macros (\bar accent, \square symbol) are deliberately excluded.
+const SIUNITX = {
+  henry:'H', farad:'F', ohm:'\\Omega', siemens:'S', volt:'V', watt:'W', ampere:'A', kelvin:'K',
+  hertz:'Hz', joule:'J', newton:'N', pascal:'Pa', metre:'m', meter:'m', gram:'g',
+  mole:'mol', tesla:'T', weber:'Wb', coulomb:'C', radian:'rad', steradian:'sr', lumen:'lm',
+  candela:'cd', becquerel:'Bq', sievert:'Sv', katal:'kat', decibel:'dB',
+  percent:'\\%', degree:'^\\circ', arcminute:"'", arcsecond:"''",
+  nano:'n', micro:'\\mu', milli:'m', pico:'p', femto:'f', kilo:'k', mega:'M', giga:'G',
+  centi:'c', deci:'d', deca:'da', hecto:'h', atto:'a',
+};
+function expandUnits(tex){
+  return tex.replace(/\\degreeCelsius\b/g, '{}^\\circ\\mathrm{C}')
+            .replace(/\\([a-zA-Z]+)\b/g, (m, name) => {
+              if (!(name in SIUNITX)) return m;
+              const v = SIUNITX[name];
+              return /^[A-Za-z]+$/.test(v) ? `\\mathrm{${v}}` : v;   // bare letters → upright; \Omega, \mu, ^\circ, % used as-is
+            });
+}
 function runKatex(el){
   if (!window.katex){ setTimeout(() => runKatex(el), 100); return; }
   el.querySelectorAll('span.math').forEach(s => {
-    const tex = s.textContent.replace(/\\label\{[^}]*\}/g, '');   // KaTeX renders \label as a red error; numbering is automatic
+    const tex = expandUnits(s.textContent.replace(/\\label\{[^}]*\}/g, ''));   // \label → red error; siunitx units → upright text
     try { window.katex.render(tex, s, { displayMode:s.classList.contains('display'), throwOnError:false }); } catch(e){}
   });
 }
