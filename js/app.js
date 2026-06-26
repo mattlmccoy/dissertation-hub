@@ -120,16 +120,19 @@ function renderDoc(fragment){
 }
 // ---------- clickable cross-references (Figure / Table / Section / Chapter N.M) ----------
 const chapterByNum = n => CHAPTERS.find(c => c.n === n);
-function captionTarget(doc, kind, num){
-  return [...doc.querySelectorAll('figcaption')].find(fc => new RegExp(`^\\s*(${kind}|Fig\\.?)\\s*${num.replace(/\./g,'\\.')}\\b`, 'i').test(fc.textContent))?.closest('figure');
-}
 function sectionNumberMap(doc){
   const n = chMeta(current).n; const map = {}; let h2 = 0, h3 = 0;
   doc.querySelectorAll('h2, h3').forEach(h => { if (h.tagName==='H2'){ h2++; h3 = 0; map[`${n}.${h2}`] = h; } else { h3++; map[`${n}.${h2}.${h3}`] = h; } });
   return map;
 }
+function figTableMaps(doc){   // figures/tables number per chapter in appearance order (matches LaTeX)
+  const n = chMeta(current).n; const fig = {}, tab = {}; let fi = 0, ti = 0;
+  doc.querySelectorAll('figure').forEach(f => { fig[`${n}.${++fi}`] = f; });
+  doc.querySelectorAll('table').forEach(t => { tab[`${n}.${++ti}`] = t.closest('figure') || t; });
+  return { fig, tab };
+}
 function linkCrossRefs(doc){
-  const secMap = sectionNumberMap(doc), curN = chMeta(current).n;
+  const secMap = sectionNumberMap(doc), ftMap = figTableMaps(doc), curN = chMeta(current).n;
   const re = /\b(Figures?|Fig\.?|Tables?|Sections?|Chapters?)\s+(\d+(?:\.\d+)*)/gi;
   const reTest = /\b(Figures?|Fig\.?|Tables?|Sections?|Chapters?)\s+\d/i;   // non-global: stateless .test()
   const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT, {
@@ -143,8 +146,8 @@ function linkCrossRefs(doc){
       const kindWord = m[1], num = m[2], lead = parseInt(num, 10);
       const isFig = /^Fig/i.test(kindWord), isTab = /^Tab/i.test(kindWord), isChap = /^Chap/i.test(kindWord);
       let handler = null;
-      if (isFig || isTab){ const kind = isFig ? 'Figure' : 'Table';
-        if (lead === curN){ const t = captionTarget(doc, kind, num); if (t) handler = () => scrollFlash(t); }
+      if (isFig || isTab){
+        if (lead === curN){ const t = (isFig ? ftMap.fig : ftMap.tab)[num]; if (t) handler = () => scrollFlash(t); }
         else { const ch = chapterByNum(lead); if (ch) handler = () => enterChapter(ch.id); } }
       else if (isChap){ const ch = chapterByNum(lead); if (ch && ch.id !== current) handler = () => enterChapter(ch.id); }
       else { // Section
