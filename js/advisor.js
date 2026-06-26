@@ -31,7 +31,7 @@ const CHAPTERS = [
   { id:'ch_materials',    n:8, title:'Extensibility of RF in Advanced Manufacturing' },
   { id:'ch_conclusions',  n:9, title:'Conclusions' },
 ];
-const chMeta = id => CHAPTERS.find(c => c.id === id) || { n:'?', title:id };
+const chMeta = id => CHAPTERS.find(c => c.id === id) || (id === '__outline__' ? { n:'·', title:'Proposed outline' } : { n:'?', title:id });
 const TAGS = ['suggestion','wording','question','clarity','citation'];
 const shortTitle = t => { const s = t.split(':')[0].trim(); return s.length <= 34 ? s : s.slice(0,34).replace(/\s\S*$/,'') + '…'; };
 const escapeHtml = s => (s||'').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
@@ -336,11 +336,76 @@ function enterHome(){
       <div style="font-size:11.5px;color:var(--text-3)">Chapter ${c.n}</div>
       <div style="font-size:14px;font-weight:500;line-height:1.35;margin:3px 0 11px;min-height:38px">${shortTitle(c.title)}</div>
       <div style="font-size:11px;color:var(--text-2)">${n?`${n} comment${n>1?'s':''}`:'open to review'}</div></div>`; }).join('');
+  const oc=JSON.parse(localStorage.getItem(localKey('__outline__'))||'null'); const ocn=oc?.comments?.length||0;
   read.innerHTML=`<div style="max-width:900px;margin:0 auto;padding:28px 24px 90px">
       <div style="font-size:13px;color:var(--text-2);margin-bottom:20px">Welcome, ${escapeHtml(ADVISOR.name)}. The chapters released for your review are below. Open one to read it and leave comments or suggested edits; use <b>Submit comments</b> when you're done.</div>
+      <button id="outline-card" style="display:flex;align-items:center;gap:13px;width:100%;text-align:left;border:.5px solid var(--accent);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:26px;background:var(--accent-bg);cursor:pointer;font:inherit;color:var(--text)">
+        <i class="ti ti-list-tree" style="font-size:22px;color:var(--accent)"></i>
+        <div style="min-width:0"><div style="font-size:14px;font-weight:500">Proposed dissertation outline</div>
+        <div style="font-size:11.5px;color:var(--text-2)">See the planned structure and comment on it — available before chapters are released.</div></div>
+        <span style="margin-left:auto;font-size:11.5px;color:var(--text-2);white-space:nowrap">${ocn?ocn+' comment'+(ocn>1?'s':''):'open to review'} <i class="ti ti-chevron-right" style="vertical-align:-2px"></i></span></button>
       <div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">CHAPTERS FOR REVIEW</div>
       ${list.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div>`:`<div class="empty">No chapters have been released for your review yet. You'll see them here once they're shared.</div>`}</div>`;
   read.querySelectorAll('[data-ch]').forEach(el=>el.onclick=()=>loadChapter(el.dataset.ch));
+  document.getElementById('outline-card').onclick=loadOutline;
+}
+// ---------- proposed outline (available before chapters are released) ----------
+async function loadOutline(){
+  current='__outline__'; review=loadLocal('__outline__');
+  document.getElementById('nav').style.display='none'; document.getElementById('comments').style.display='';
+  renderOutlineTopbar();
+  read.innerHTML=`<div class="empty"><i class="ti ti-loader-2" style="font-size:22px"></i><div style="margin-top:8px">Loading outline…</div></div>`;
+  let data=null; const dev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  try{
+    if(dev){ const r=await fetch('./outline.json'); if(r.ok) data=await r.json(); }
+    if(!data){ const t=tok(); if(t){ const r=await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/outline.json?t=${Date.now()}`,{headers:{Authorization:`Bearer ${t}`,Accept:'application/vnd.github.raw'},cache:'no-store'}); if(r.status===401) return showKeyExpired(); if(r.ok) data=await r.json(); } }
+  }catch(e){}
+  if(!data){ read.innerHTML=`<div class="empty">Couldn't load the outline. Check your access key.</div>`; return; }
+  renderOutline(data); renderComments(); syncDown();
+}
+function renderOutlineTopbar(){
+  document.getElementById('topbar').innerHTML=`
+    <button class="icbtn" id="btn-home" title="All chapters"><i class="ti ti-layout-grid"></i></button>
+    <button class="chsel" id="chsel" style="cursor:default"><i class="ti ti-list-tree"></i><span>Proposed outline</span></button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:3px">
+      <button class="icbtn" id="btn-theme" title="Theme"><i class="ti ti-moon"></i></button>
+      <button class="btn btn-primary" id="btn-submit"><i class="ti ti-send"></i>Submit comments</button>
+      <button class="icbtn" id="btn-key" title="Access key"><i class="ti ti-key"></i></button></div>`;
+  document.getElementById('btn-home').onclick=enterHome;
+  document.getElementById('btn-theme').onclick=()=>{ document.documentElement.classList.toggle('dark'); localStorage.setItem('theme',document.documentElement.classList.contains('dark')?'dark':'light'); };
+  document.getElementById('btn-submit').onclick=submitComments;
+  document.getElementById('btn-key').onclick=()=>{ const v=prompt('Access key:',tok()||''); if(v!==null){ if(v.trim()) localStorage.setItem('ghpat',v.trim()); else localStorage.removeItem('ghpat'); boot(); } };
+}
+function renderOutline(data){
+  const cnt=label=>review.comments.filter(c=>c.anchor?.quote===label).length;
+  const badge=n=>n?`<i class="ti ti-message"></i>${n}`:`<i class="ti ti-message-plus"></i>`;
+  const chapters=data.chapters.map(ch=>{
+    const secs=(ch.sections||[]).map(s=>`<div class="ol-node">
+        <div class="ol-srow"><span class="ol-slabel">${escapeHtml(s.title)}</span>${s.synopsis?`<span class="ol-syn">${escapeHtml(s.synopsis)}</span>`:''}</div>
+        <button class="ol-cmt" data-node="${escapeHtml(s.title)}" data-sec="${escapeHtml(ch.title)}">${badge(cnt(s.title))}</button></div>`).join('');
+    return `<div class="ol-chapter">
+      <div class="ol-chead" data-toggle><i class="ti ti-chevron-right ol-chev"></i><span class="ol-cn">${ch.n}</span>
+        <div style="min-width:0;flex:1"><div class="ol-ctitle">${escapeHtml(ch.title)}</div>${ch.synopsis?`<div class="ol-csyn">${escapeHtml(ch.synopsis)}</div>`:''}</div>
+        <button class="ol-cmt" data-node="${escapeHtml(ch.title)}" data-sec="${escapeHtml(ch.title)}">${badge(cnt(ch.title))}</button></div>
+      <div class="ol-sections">${secs}</div></div>`;
+  }).join('');
+  read.innerHTML=`<div class="ol-wrap"><h1 class="ol-h1">${escapeHtml(data.title||'Proposed outline')}</h1>
+    <p class="ol-intro">${escapeHtml(data.intro||'')}</p>${chapters}</div>`;
+  read.querySelectorAll('[data-toggle]').forEach(h=>h.onclick=e=>{ if(e.target.closest('.ol-cmt')) return; h.closest('.ol-chapter').classList.toggle('open'); });
+  read.querySelectorAll('.ol-cmt').forEach(b=>b.onclick=e=>{ e.stopPropagation(); outlineComment(b, b.dataset.node, b.dataset.sec); });
+}
+function outlineComment(btn, label, section){
+  document.getElementById('ol-composer')?.remove();
+  const box=document.createElement('div'); box.id='ol-composer'; box.className='ol-composer';
+  box.innerHTML=`<textarea rows="2" placeholder="Comment on “${escapeHtml(label)}”…"></textarea>
+    <div class="ol-cactions"><button class="btn btn-primary ol-save">Add comment</button><button class="btn ol-cancel">Cancel</button></div>`;
+  (btn.closest('.ol-node, .ol-chead')||btn).after(box); box.querySelector('textarea').focus();
+  box.querySelector('.ol-cancel').onclick=()=>box.remove();
+  box.querySelector('.ol-save').onclick=()=>{ const v=box.querySelector('textarea').value.trim(); if(!v) return;
+    review=addComment(review,{ anchor:{quote:label, section}, kind:'text', tag:'suggestion', body:v, author:ADVISOR.id });
+    save(); syncUpSoon(); box.remove();
+    const n=review.comments.filter(c=>c.anchor?.quote===label).length; btn.innerHTML=`<i class="ti ti-message"></i>${n}`;
+    renderComments(); flash('Comment added — use Submit comments when finished.'); };
 }
 async function submitComments(){ const t=tok(); if(!t){ flash('Add your access key first.'); return; } const open=review.comments.filter(c=>c.status==='open'); if(!open.length){ flash('No new comments to submit.'); return; }
   flash('Submitting…'); try{ open.forEach(c=>{ review=updateComment(review,c.id,{status:'submitted'}); }); save(); await syncUp(); renderComments(); flash(`Submitted ${open.length} comment${open.length>1?'s':''}. Thank you!`); }catch(e){ flash('Submit failed — try again.'); } }

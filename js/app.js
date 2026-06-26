@@ -14,7 +14,7 @@ const CHAPTERS = [
   { id:'ch_materials',    n:8, title:'Extensibility of RF in Advanced Manufacturing' },
   { id:'ch_conclusions',  n:9, title:'Conclusions' },
 ];
-const chMeta = id => CHAPTERS.find(c => c.id === id) || { n:'?', title:id };
+const chMeta = id => CHAPTERS.find(c => c.id === id) || (id === '__outline__' ? { n:'·', title:'Proposed outline' } : { n:'?', title:id });
 const TAGS = ['claim','wording','figure','citation','question'];
 
 const read = document.getElementById('read');
@@ -408,11 +408,11 @@ function openFigureMarkup(fig, anchor){
   const ov = document.createElement('div'); ov.id = 'figmk'; ov.className = 'figmk-back';
   ov.innerHTML = `<div class="figmk-modal">
     <div class="figmk-tools">
-      <button class="figmk-pen on" data-c="#e5484d" title="Mark to remove / don't want">remove</button>
-      <button class="figmk-pen" data-c="#30a46c" title="Mark to add / want">add</button>
+      <button class="figmk-tool on" data-t="box" title="Drag a box around the area with the issue"><i class="ti ti-square"></i>Box</button>
+      <button class="figmk-tool" data-t="free" title="Freehand — circle or point at something"><i class="ti ti-scribble"></i>Draw</button>
       <span class="figmk-sep"></span>
       <button class="figmk-undo">Undo</button><button class="figmk-clear">Clear</button>
-      <span class="figmk-hint">red = remove · green = add</span></div>
+      <span class="figmk-hint">box = mark the area · draw = circle or point</span></div>
     <div class="figmk-stage" style="width:${W}px;height:${H}px">
       <img class="figmk-img" src="${img.src}" width="${W}" height="${H}" crossorigin="anonymous">
       <canvas class="figmk-canvas" width="${W}" height="${H}"></canvas></div>
@@ -421,19 +421,26 @@ function openFigureMarkup(fig, anchor){
   </div>`;
   document.body.appendChild(ov);
   const canvas = ov.querySelector('.figmk-canvas'), ctx = canvas.getContext('2d');
-  let color = '#e5484d', drawing = false, strokes = [], cur = null;
-  const redraw = () => { ctx.clearRect(0,0,W,H); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3;
-    strokes.forEach(s => { ctx.strokeStyle=s.color; ctx.beginPath(); s.points.forEach((p,i) => i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); }); };
+  const COLOR = '#d6409f';                       // single high-visibility annotation color
+  let tool = 'box', drawing = false, shapes = [], cur = null, start = null;
+  const drawShape = s => { ctx.strokeStyle=COLOR; ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round';
+    if (s.type === 'rect'){ ctx.fillStyle='rgba(214,64,159,.12)'; ctx.fillRect(s.x,s.y,s.w,s.h); ctx.strokeRect(s.x,s.y,s.w,s.h); }
+    else { ctx.beginPath(); s.points.forEach((p,i) => i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); } };
+  const redraw = preview => { ctx.clearRect(0,0,W,H); shapes.forEach(drawShape); if (preview) drawShape(preview); };
   const pos = e => { const r = canvas.getBoundingClientRect(); return [ (e.clientX-r.left)*(W/r.width), (e.clientY-r.top)*(H/r.height) ]; };
-  canvas.addEventListener('pointerdown', e => { drawing=true; cur={color,points:[pos(e)]}; strokes.push(cur); canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointermove', e => { if (!drawing) return; cur.points.push(pos(e)); redraw(); });
-  canvas.addEventListener('pointerup', () => { drawing=false; });
-  ov.querySelectorAll('.figmk-pen').forEach(b => b.onclick = () => { color=b.dataset.c; ov.querySelectorAll('.figmk-pen').forEach(x => x.classList.toggle('on', x===b)); });
-  ov.querySelector('.figmk-undo').onclick = () => { strokes.pop(); redraw(); };
-  ov.querySelector('.figmk-clear').onclick = () => { strokes=[]; redraw(); };
+  const rectOf = (a,b) => ({ type:'rect', x:Math.min(a[0],b[0]), y:Math.min(a[1],b[1]), w:Math.abs(b[0]-a[0]), h:Math.abs(b[1]-a[1]) });
+  canvas.addEventListener('pointerdown', e => { drawing=true; start=pos(e);
+    if (tool==='free'){ cur={type:'free',points:[start]}; shapes.push(cur); } canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => { if (!drawing) return; const p=pos(e);
+    if (tool==='free'){ cur.points.push(p); redraw(); } else redraw(rectOf(start,p)); });
+  canvas.addEventListener('pointerup', e => { if (!drawing) return; drawing=false;
+    if (tool==='box'){ const r=rectOf(start,pos(e)); if (r.w>4 && r.h>4) shapes.push(r); redraw(); } });
+  ov.querySelectorAll('.figmk-tool').forEach(b => b.onclick = () => { tool=b.dataset.t; ov.querySelectorAll('.figmk-tool').forEach(x => x.classList.toggle('on', x===b)); });
+  ov.querySelector('.figmk-undo').onclick = () => { shapes.pop(); redraw(); };
+  ov.querySelector('.figmk-clear').onclick = () => { shapes=[]; redraw(); };
   ov.querySelector('.figmk-cancel').onclick = () => ov.remove();
   ov.querySelector('.figmk-save').onclick = async () => {
-    if (!strokes.length){ flash('Draw on the figure first, or Cancel.'); return; }
+    if (!shapes.length){ flash('Mark the figure first (Box or Draw), or Cancel.'); return; }
     const note = ov.querySelector('.figmk-note').value.trim();
     let b64 = null;
     try { const ex = document.createElement('canvas'); ex.width=W; ex.height=H; const ec = ex.getContext('2d');
@@ -968,9 +975,9 @@ function homeHtml(){
   }).join('');
   return `<div style="max-width:900px;margin:0 auto;padding:28px 24px 90px">
       ${cont}
-      <div id="inbox-panel" class="ibx" style="display:none"></div>
       <div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">ALL CHAPTERS</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div></div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div>
+      <div id="inbox-panel" class="ibx" style="display:none;margin-top:28px;margin-bottom:0"></div></div>`;
 }
 
 // ---------- history / version timeline (data repo content commits — readable with the data-repo token) ----------
