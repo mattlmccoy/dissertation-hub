@@ -1,626 +1,454 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="ember" data-mode="dark">
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dissertation Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,900;1,9..144,400&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
 <style>
-  :root{
-    --bg:#15120e; --bg2:#1b1610; --panel:#221c15; --panel2:#2a2319;
-    --text:#ece4d5; --text2:#bcae98; --muted:#8d8270; --line:rgba(236,228,213,.10);
-    --accent:#e0a050; --accent2:#d2603a;
-    --shadow:0 18px 50px -20px rgba(0,0,0,.7);
-    --radius:14px;
-    --p0:#d2603a; --p1:#e0a050; --p2:#8d8270;
-    --done:#62b89a;
-    --ph-doe:#e0a050; --ph-papers:#9a86c4; --ph-novelty:#62b89a;
-    --ph-lab:#6aa6c4; --ph-diss:#d2603a; --ph-future:#8a8f98; --ph-undergrad:#46b5c4;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{
-    background:
-      radial-gradient(1200px 700px at 85% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
-      radial-gradient(1000px 600px at -10% 110%, color-mix(in srgb, var(--ph-novelty) 10%, transparent), transparent 55%),
-      var(--bg);
-    color:var(--text); font-family:"Public Sans",system-ui,sans-serif;
-    line-height:1.5; min-height:100vh; -webkit-font-smoothing:antialiased; transition:background .4s,color .4s;
-  }
-  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.04;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-  html[data-mode="light"] body::before{opacity:.025;mix-blend-mode:multiply}
-  .wrap{max-width:1140px;margin:0 auto;padding:30px 24px 90px;position:relative;z-index:2}
-
-  /* header */
-  header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:20px}
-  .brand .kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
-  .brand h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(26px,4vw,42px);line-height:1;letter-spacing:-.01em}
-  .brand h1 em{font-style:italic;color:var(--text2);font-weight:400}
-  .countdown{text-align:right;flex-shrink:0}
-  .countdown .num{font-family:"Fraunces",serif;font-weight:900;font-size:clamp(38px,7vw,64px);line-height:.85;letter-spacing:-.02em}
-  .countdown .num.warn{color:var(--accent2)}
-  .countdown .lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-top:8px}
-  .countdown .lbl b{color:var(--text2);font-weight:500}
-
-  /* toolbar */
-  .toolbar{display:flex;align-items:center;gap:10px;margin:22px 0 14px;flex-wrap:wrap}
-  .tabs{display:flex;gap:3px;background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:4px}
-  .tab{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:none;border:0;padding:8px 13px;border-radius:8px;cursor:pointer;transition:.18s}
-  .tab:hover{color:var(--text)}
-  .tab.active{background:var(--panel2);color:var(--accent);box-shadow:inset 0 0 0 1px var(--line)}
-  .spacer{flex:1}
-  .btn{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.03em;color:var(--text);background:var(--panel);border:1px solid var(--line);padding:9px 13px;border-radius:9px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:7px}
-  .btn:hover{border-color:color-mix(in srgb,var(--text) 24%,transparent);background:var(--panel2)}
-  .btn.primary{background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 78%,black));color:#1a130a;border-color:transparent;font-weight:600}
-  .btn.cta{background:linear-gradient(180deg,var(--ph-novelty),color-mix(in srgb,var(--ph-novelty) 75%,black));color:#0c1a14;border-color:transparent;font-weight:600}
-  .btn:disabled{opacity:.35;cursor:default}
-  .btn .dot{width:7px;height:7px;border-radius:50%;background:var(--done)}
-  .btn .dot.dirty{background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
-
-  /* theme bar */
-  .swatches{display:flex;gap:5px;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:5px 7px}
-  .sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:.15s;padding:0}
-  .sw:hover{transform:scale(1.15)}
-  .sw.on{border-color:var(--text)}
-
-  /* filter chips */
-  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
-  .fchip{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.03em;padding:6px 12px;border-radius:20px;border:1px solid var(--line);background:var(--panel);color:var(--text2);cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
-  .fchip:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 22%,transparent)}
-  .fchip.on{color:var(--text);border-color:currentColor}
-  .fchip i{width:9px;height:9px;border-radius:3px;display:inline-block}
-  .fchip .n{opacity:.6}
-
-  /* progress */
-  .progress{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
-  .pcard{flex:1;min-width:150px;background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px;cursor:pointer;transition:.18s}
-  .pcard:hover{border-color:color-mix(in srgb,var(--text) 20%,transparent);transform:translateY(-2px)}
-  .pcard .ph{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:7px}
-  .pcard .ph i{width:9px;height:9px;border-radius:3px}
-  .pcard .frac{font-family:"Fraunces",serif;font-size:25px;font-weight:600;margin:7px 0 8px}
-  .pcard .frac span{font-size:13px;color:var(--muted)}
-  .bar{height:5px;border-radius:3px;background:color-mix(in srgb,var(--text) 8%,transparent);overflow:hidden}
-  .bar i{display:block;height:100%;border-radius:3px;transition:width .6s cubic-bezier(.2,.7,.2,1)}
-
-  /* task list */
-  .group{margin-bottom:26px}
-  .group>h2{font-family:"Fraunces",serif;font-weight:500;font-size:18px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
-  .group>h2 i{width:11px;height:11px;border-radius:3px}
-  .group>h2 .cnt{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);font-weight:400}
-  .empty{color:var(--muted);font-style:italic;padding:16px 4px;font-family:"Fraunces",serif}
-  .task{display:flex;gap:13px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lc,var(--muted));border-radius:11px;padding:13px 15px;margin-bottom:8px;cursor:pointer;transition:.16s}
-  .task:hover{background:var(--panel2);transform:translateX(2px)}
-  .task.done{opacity:.5}
-  .check{flex-shrink:0;width:21px;height:21px;border-radius:7px;border:1.5px solid var(--text2);margin-top:1px;cursor:pointer;display:grid;place-items:center;transition:.16s;background:transparent}
-  .check:hover{border-color:var(--done)}
-  .check.on{background:var(--done);border-color:var(--done)}
-  .check.on::after{content:"✓";color:#10201a;font-size:13px;font-weight:700}
-  .tbody{flex:1;min-width:0}
-  .ttitle{font-size:15px;font-weight:500}
-  .task.done .ttitle{text-decoration:line-through;text-decoration-color:var(--muted)}
-  .tmeta{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px;align-items:center}
-  .chip{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.03em;padding:2.5px 8px;border-radius:20px;border:1px solid var(--line);color:var(--text2)}
-  .chip.due.over{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 40%,transparent)}
-  .chip.cad{color:var(--ph-lab)}
-  .chip.when{color:var(--done)}
-  .tnote{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.45}
-
-  /* kanban */
-  .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
-  .kcol{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:12px;min-height:120px}
-  .kcol.drop{outline:2px dashed var(--accent);outline-offset:-4px}
-  .kcol h3{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);margin-bottom:11px;display:flex;justify-content:space-between}
-  .kcard{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lc,var(--muted));border-radius:9px;padding:10px 11px;margin-bottom:8px;cursor:grab;transition:.14s}
-  .kcard:hover{background:var(--panel2)}
-  .kcard:active{cursor:grabbing}
-  .kcard .kt{font-size:13px;font-weight:500;line-height:1.3}
-  .kcard.done .kt{text-decoration:line-through;color:var(--muted)}
-  .kcard .km{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  @media(max-width:820px){.kanban{grid-template-columns:1fr 1fr}}
-
-  /* gantt */
-  .gantt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg2);padding:14px}
-  .gantt{display:grid;gap:3px;min-width:max-content}
-  .grow{display:grid;grid-template-columns:130px 1fr;align-items:center;gap:8px}
-  .grow .glabel{font-family:"IBM Plex Mono",monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);display:flex;align-items:center;gap:6px;white-space:nowrap}
-  .grow .glabel i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
-  .gtrack{display:flex;gap:2px;align-items:center}
-  .gcell{width:15px;height:22px;border-radius:3px;display:grid;place-items:center;font-size:9px;color:#0c0c0c;font-family:"IBM Plex Mono",monospace;cursor:default;transition:.12s}
-  .gcell.has{cursor:pointer}
-  .gcell.has:hover{transform:scale(1.25);outline:1px solid var(--text)}
-  .gaxis{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-top:6px}
-  .gaxis .gticks{display:flex;gap:2px;font-family:"IBM Plex Mono",monospace;font-size:8.5px;color:var(--muted)}
-  .gaxis .gtick{width:15px;text-align:center;writing-mode:vertical-rl;height:34px}
-  .ghist{display:grid;grid-template-columns:130px 1fr;gap:8px;margin-bottom:8px;align-items:end}
-  .ghbars{display:flex;gap:2px;align-items:end;height:42px}
-  .ghbar{width:15px;background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 60%,transparent));border-radius:2px 2px 0 0;min-height:2px}
-  .gsec-title{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);margin:22px 0 10px}
-  .gbars{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg2);padding:12px 14px 16px}
-  .gbaxis{display:grid;grid-template-columns:165px 1fr;gap:10px;margin-bottom:4px}
-  .gbaxis .ticks{position:relative;height:13px}
-  .gbaxis .ticks span{position:absolute;transform:translateX(-50%);font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);white-space:nowrap}
-  .gbphase{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:7px;margin:13px 0 5px}
-  .gbphase i{width:9px;height:9px;border-radius:3px}
-  .gbrow{display:grid;grid-template-columns:165px 1fr;gap:10px;align-items:center;height:23px}
-  .gblabel{font-size:11.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .gbrow.done .gblabel{color:var(--muted)}
-  .gbtrack{position:relative;height:15px;border-radius:4px;background:color-mix(in srgb,var(--text) 5%,transparent)}
-  .gbbar{position:absolute;top:1.5px;height:12px;border-radius:3px;cursor:pointer;min-width:5px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);transition:.12s}
-  .gbbar:hover{filter:brightness(1.18);outline:1px solid var(--text)}
-  .gbpill{position:absolute;right:4px;top:0;font-family:"IBM Plex Mono",monospace;font-size:9px;padding:1.5px 8px;border-radius:10px;border:1px dashed var(--line);color:var(--muted);cursor:pointer;white-space:nowrap}
-  .gbpill.active{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);border-style:solid}
-  .gbpill.blocked{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 45%,transparent)}
-
-  /* modal */
-  .scrim{position:fixed;inset:0;background:rgba(8,6,4,.66);backdrop-filter:blur(3px);z-index:50;display:none;align-items:flex-start;justify-content:center;padding:6vh 18px;overflow-y:auto}
-  .scrim.on{display:flex}
-  .modal{background:var(--bg2);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);width:min(560px,100%);padding:26px;animation:rise .25s cubic-bezier(.2,.7,.2,1)}
-  .modal.wide{width:min(720px,100%)}
-  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-  .modal h3{font-family:"Fraunces",serif;font-weight:600;font-size:21px;margin-bottom:16px}
-  .field{margin-bottom:13px}
-  .field label{display:block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-  .field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:10px 12px;font-family:"Public Sans",sans-serif;font-size:14px}
-  .field input:focus,.field select:focus,.field textarea:focus{outline:0;border-color:var(--accent)}
-  .field textarea{resize:vertical;min-height:60px}
-  .row2{display:flex;gap:12px}.row2 .field{flex:1}
-  .modal-actions{display:flex;gap:10px;justify-content:space-between;margin-top:20px;align-items:center}
-  .modal-actions .right{display:flex;gap:10px}
-  .link{background:none;border:0;color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-  .link.danger{color:var(--accent2)}
-  .note{font-size:12px;color:var(--muted);line-height:1.5;background:color-mix(in srgb,var(--text) 4%,transparent);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
-  .note b{color:var(--text2)}
-
-  /* week in review */
-  .wir-hero{text-align:center;padding:6px 0 18px;position:relative;overflow:hidden}
-  .wir-hero .big{font-family:"Fraunces",serif;font-weight:900;font-size:64px;line-height:.9;color:var(--accent);letter-spacing:-.02em}
-  .wir-hero .sub{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin-top:8px}
-  .wir-hero .tag{font-family:"Fraunces",serif;font-style:italic;font-size:17px;color:var(--text);margin-top:14px}
-  .wir-stats{display:flex;gap:10px;margin:6px 0 18px;flex-wrap:wrap}
-  .wir-stat{flex:1;min-width:90px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 13px;text-align:center}
-  .wir-stat .v{font-family:"Fraunces",serif;font-size:24px;font-weight:600}
-  .wir-stat .k{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:3px}
-  .wir-ph{margin-bottom:14px}
-  .wir-ph h4{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:7px}
-  .wir-ph h4 i{width:9px;height:9px;border-radius:3px}
-  .wir-item{font-size:13px;padding:5px 9px;border-left:2px solid var(--lc,var(--muted));margin-bottom:4px;color:var(--text2);cursor:pointer;border-radius:0 6px 6px 0}
-  .wir-item:hover{background:var(--panel);color:var(--text)}
-  .confetti{position:absolute;top:-10px;width:8px;height:14px;opacity:.9;animation:fall linear forwards}
-  @keyframes fall{to{transform:translateY(360px) rotate(540deg);opacity:0}}
-
-  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
-  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:12px 20px;border-radius:11px;font-family:"IBM Plex Mono",monospace;font-size:13px;z-index:80;transition:.3s;box-shadow:var(--shadow)}
-  .toast.on{transform:translateX(-50%) translateY(0)}
-  .toast.err{border-color:var(--accent2)}
+:root{
+  --bg:#ffffff; --bg-2:#faf9f7; --bg-3:#f1efe9; --text:#1f1e1c; --text-2:#605e58; --text-3:#8f8d84;
+  --border:rgba(0,0,0,.10); --border-2:rgba(0,0,0,.16); --accent:#2c64c4; --accent-bg:#eaf1fb;
+  --success:#0f6e56; --success-bg:#e1f5ee; --warn:#9a6a12; --warn-bg:#faf0d8; --danger:#b3261e; --danger-bg:#fbeae8;
+  --p0:#b3261e; --p1:#9a6a12; --p2:#605e58;
+  --r-sm:7px; --r-md:9px; --r-lg:13px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+}
+.dark{
+  --bg:#1b1a18; --bg-2:#222120; --bg-3:#2b2a27; --text:#f4f2ec; --text-2:#b1afa6; --text-3:#85837b;
+  --border:rgba(255,255,255,.12); --border-2:rgba(255,255,255,.20); --accent:#6aa0ec; --accent-bg:#1b2c44;
+  --success:#69c6a3; --success-bg:#11362c; --warn:#e0b15e; --warn-bg:#3a2f17; --danger:#e8857d; --danger-bg:#3a1f1d;
+  --p0:#e8857d; --p1:#e0b15e; --p2:#b1afa6;
+}
+*{box-sizing:border-box} html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+input,textarea,select{font:inherit;color:var(--text);background:var(--bg);border:.5px solid var(--border);border-radius:var(--r-sm);padding:7px 9px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+.icbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--r-md);color:var(--text-2)}
+.icbtn:hover{background:var(--bg-3);color:var(--text)} .icbtn:disabled{opacity:.4;cursor:default}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:.5px solid var(--border-2);border-radius:var(--r-md);font-size:13px;font-weight:500}
+.btn:hover{background:var(--bg-2)} .btn-primary{background:var(--text);color:var(--bg);border-color:transparent} .btn-primary:hover{opacity:.9}
+.btn-danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:.5px solid var(--border)}
+.wrap{max-width:1120px;margin:0 auto;padding:22px 22px 90px}
+header.top{display:flex;align-items:center;gap:14px;border-bottom:.5px solid var(--border);padding-bottom:18px;margin-bottom:18px;flex-wrap:wrap}
+.brand .kick{font-size:11px;letter-spacing:.08em;color:var(--text-3)} .brand h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:2px 0 0}
+.cd{margin-left:auto;text-align:right} .cd .num{font-size:26px;font-weight:600;line-height:1} .cd .num.warn{color:var(--warn)} .cd .lbl{font-size:11px;color:var(--text-2)}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.search{flex:1;min-width:190px;max-width:340px;display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:.5px solid var(--border);border-radius:var(--r-md);background:var(--bg);color:var(--text-3)}
+.search input{flex:1;border:none;background:none;padding:0}
+.tabs{display:flex;gap:2px;background:var(--bg-3);border-radius:var(--r-md);padding:3px}
+.tab{padding:5px 11px;border-radius:6px;font-size:13px;color:var(--text-2)} .tab.active{background:var(--bg);color:var(--text);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.sel{font-size:12.5px;color:var(--text-2);padding:6px 8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{border:.5px solid var(--border);border-radius:var(--r-lg);padding:13px 15px;background:var(--bg-2)}
+.stat .v{font-size:22px;font-weight:600} .stat .k{font-size:11.5px;color:var(--text-2);margin-top:2px} .stat .sub{font-size:11px;color:var(--text-3);margin-top:4px}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.fchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 11px;border-radius:20px;border:.5px solid var(--border);color:var(--text-2)}
+.fchip i{width:8px;height:8px;border-radius:50%;display:inline-block} .fchip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)} .fchip .n{font-size:10.5px;color:var(--text-3)}
+.group h2{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;margin:18px 0 10px} .group h2 .cnt{font-size:11.5px;font-weight:400;color:var(--text-3)} .group h2 i.pdot{width:9px;height:9px;border-radius:50%}
+.task{display:flex;gap:11px;align-items:flex-start;border:.5px solid var(--border);border-left:2.5px solid var(--lc,var(--p2));border-radius:var(--r-md);padding:11px 13px;margin-bottom:8px;background:var(--bg);cursor:pointer}
+.task:hover{border-color:var(--border-2)} .task.done{opacity:.6} .task.dragging{opacity:.4}
+.check{flex:0 0 auto;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border-2);margin-top:1px;display:flex;align-items:center;justify-content:center;color:transparent;font-size:12px}
+.check.on{background:var(--success);border-color:var(--success);color:#fff} .task.done .ttitle{text-decoration:line-through}
+.ttitle{font-size:14px;font-weight:500;line-height:1.4} .tmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center} .tnote{font-size:12.5px;color:var(--text-2);margin-top:6px}
+.lblchip{font-size:10.5px;padding:1px 8px;border-radius:20px;background:var(--bg-3);color:var(--text-2);border:.5px solid var(--border)}
+.miniprog{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-3)}
+.empty{color:var(--text-3);font-size:13px;padding:22px;text-align:center;border:.5px dashed var(--border);border-radius:var(--r-md)}
+/* kanban */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kcol{background:var(--bg-2);border:.5px solid var(--border);border-radius:var(--r-lg);padding:10px;min-height:120px}
+.kcol.drop{border-color:var(--accent);background:var(--accent-bg)} .kcol.over{outline:1.5px dashed var(--danger);outline-offset:-3px}
+.kcol h3{font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between;margin:2px 4px 10px;color:var(--text-2)} .kcol h3 span{font-size:11px;color:var(--text-3)}
+.kcard{border:.5px solid var(--border);border-left:2.5px solid var(--lc,var(--p2));border-radius:var(--r-sm);padding:9px 10px;margin-bottom:7px;background:var(--bg);cursor:grab} .kcard:hover{border-color:var(--border-2)} .kcard.done{opacity:.55}
+.kt{font-size:13px;font-weight:500;line-height:1.35} .km{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+/* gantt */
+.gantt{display:flex;flex-direction:column;gap:5px;margin-top:6px} .grow{display:flex;align-items:center;gap:8px;font-size:12px}
+.glabel{flex:0 0 150px;display:flex;align-items:center;gap:6px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .glabel i{width:8px;height:8px;border-radius:50%}
+.gtrack{flex:1;display:flex;gap:2px} .gcell{flex:1;height:16px;border-radius:2px;background:var(--bg-3)} .gcell.has{cursor:pointer}
+.ghbars{display:flex;gap:2px;align-items:flex-end;height:46px;margin:2px 0 10px 158px} .ghbar{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px}
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:70;display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto} .scrim.on{display:flex}
+.modal{background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-lg);width:min(560px,96%);box-shadow:0 24px 70px rgba(0,0,0,.3);padding:20px 22px}
+.modal h3{font-size:16px;font-weight:600;margin:0 0 16px;display:flex;align-items:center} .modal .x{margin-left:auto}
+.field{margin-bottom:12px} .field label{display:block;font-size:11.5px;color:var(--text-2);margin-bottom:5px} .field input,.field textarea,.field select{width:100%}
+.row2{display:flex;gap:10px} .row2>.field{flex:1}
+.subrow{display:flex;align-items:center;gap:8px;margin-bottom:5px} .subrow .check{margin-top:0} .subrow input{flex:1;border:none;background:none;padding:2px 0} .subrow.done input{text-decoration:line-through;color:var(--text-3)}
+.cmt{border-top:.5px solid var(--border);padding:8px 0;font-size:12.5px} .cmt .who{font-size:11px;color:var(--text-3);margin-bottom:2px} .cmt .who b{color:var(--accent)}
+.act{font-size:11px;color:var(--text-3);padding:2px 0}
+.modal .acts{display:flex;gap:8px;margin-top:16px;align-items:center}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;box-shadow:0 6px 20px rgba(0,0,0,.2)} .toast.on{opacity:1} .toast.err{background:var(--danger)}
+.banner{background:var(--warn-bg);color:var(--warn);border-radius:var(--r-md);padding:9px 13px;font-size:12.5px;margin-bottom:14px;display:flex;gap:8px;align-items:center}
+.wir-hero{text-align:center;padding:22px;background:var(--accent-bg);border-radius:var(--r-lg);margin-bottom:14px} .wir-hero .big{font-size:46px;font-weight:700;color:var(--accent)} .wir-hero .sub{color:var(--text-2)} .wir-hero .tag{margin-top:6px;font-weight:500}
+.wir-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px} .wir-stat{text-align:center;border:.5px solid var(--border);border-radius:var(--r-md);padding:10px} .wir-stat .v{font-size:20px;font-weight:600}
+.wir-ph h4{font-size:12.5px;display:flex;align-items:center;gap:6px;margin:12px 0 6px} .wir-ph h4 i{width:8px;height:8px;border-radius:50%} .wir-item{font-size:12.5px;border-left:2px solid var(--lc);padding:3px 9px;margin-bottom:3px;color:var(--text-2)}
+iframe.spec{width:100%;height:74vh;border:none;border-radius:var(--r-md);background:var(--bg-2)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand">
-      <div class="kicker">RFAM · Georgia Tech ME</div>
-      <h1>Dissertation <em>Dashboard</em></h1>
-    </div>
-    <div class="countdown">
-      <div class="num" id="cdNum">—</div>
-      <div class="lbl">days to defense · <b id="cdDate">—</b></div>
+    <div class="brand"><div class="kick">RFAM · Georgia Tech ME</div><h1>Dissertation Dashboard</h1></div>
+    <div class="cd"><div class="num" id="cdNum">—</div><div class="lbl">days to defense · <b id="cdDate">—</b></div></div>
+    <div style="display:flex;gap:3px;align-items:center">
+      <button class="btn btn-primary" id="addBtn"><i class="ti ti-plus"></i>Task</button>
+      <button class="icbtn" id="wirBtn" title="Week in review"><i class="ti ti-confetti"></i></button>
+      <button class="icbtn" id="undoBtn" title="Undo" disabled><i class="ti ti-arrow-back-up"></i></button>
+      <a class="icbtn" href="./review.html" title="Open the reviewer"><i class="ti ti-book-2"></i></a>
+      <button class="icbtn" id="syncBtn" title="Sync with GitHub"><i class="ti ti-refresh"></i></button>
+      <button class="icbtn" id="modeBtn" title="Light / dark"><i class="ti ti-moon"></i></button>
+      <button class="icbtn" id="setBtn" title="Settings"><i class="ti ti-settings"></i></button>
     </div>
   </header>
-
+  <div id="needtok" class="banner" style="display:none"><i class="ti ti-key"></i><span>Add a GitHub token to load and sync your tasks.</span><button class="btn" id="addtok" style="margin-left:auto;padding:4px 10px">Add token</button></div>
+  <div class="stats" id="stats"></div>
   <div class="toolbar">
+    <div class="search"><i class="ti ti-search"></i><input id="q" placeholder="Search tasks…  (/)"></div>
     <div class="tabs" id="tabs">
       <button class="tab active" data-view="today">Today</button>
-      <button class="tab" data-view="week">This Week</button>
+      <button class="tab" data-view="week">Week</button>
       <button class="tab" data-view="board">Board</button>
       <button class="tab" data-view="kanban">Kanban</button>
-      <button class="tab" data-view="gantt">Retro Gantt</button>
+      <button class="tab" data-view="gantt">Gantt</button>
     </div>
-    <div class="spacer"></div>
-    <a class="btn" href="review.html" title="Open the chapter reviewer" style="text-decoration:none">📖 Reviewer</a>
-    <button class="btn cta" id="wirBtn">✦ Week in Review</button>
-    <button class="btn" id="undoBtn" disabled>↶ Undo</button>
-    <button class="btn" id="addBtn">+ Task</button>
-    <div class="swatches" id="swatches" title="Theme"></div>
-    <button class="btn" id="modeBtn" title="Light / dark">☾</button>
-    <button class="btn" id="syncBtn"><span class="dot" id="syncDot"></span><span id="syncLbl">Sync</span></button>
-    <button class="btn" id="gearBtn" title="GitHub settings">&#9881;</button>
+    <select class="sel" id="fstatus"><option value="">any status</option><option value="todo">to do</option><option value="active">active</option><option value="blocked">blocked</option><option value="done">done</option></select>
+    <select class="sel" id="fprio"><option value="">any priority</option><option>P0</option><option>P1</option><option>P2</option></select>
+    <select class="sel" id="flabel"><option value="">any label</option></select>
+    <select class="sel" id="sort"><option value="manual">sort: manual</option><option value="prio">priority</option><option value="due">due date</option><option value="recent">recently done</option></select>
   </div>
-
   <div class="chips" id="chips"></div>
-  <div class="progress" id="progress"></div>
   <div id="list"></div>
-
-  <footer>
-    <span>Public app · private task data · token stays in your browser</span>
-    <span id="updatedAt">—</span>
-  </footer>
 </div>
 
 <!-- task editor -->
 <div class="scrim" id="taskScrim"><div class="modal">
-  <h3 id="taskModalTitle">Edit Task</h3>
-  <div class="field"><label>Title</label><input id="f-title" type="text"></div>
+  <h3 id="taskModalTitle">New task<button class="icbtn x" id="taskClose"><i class="ti ti-x"></i></button></h3>
+  <div class="field"><label>Title</label><input id="f-title" placeholder="What needs doing?"></div>
   <div class="row2">
     <div class="field"><label>Phase</label><select id="f-phase"></select></div>
     <div class="field"><label>Priority</label><select id="f-priority"><option>P0</option><option>P1</option><option>P2</option></select></div>
   </div>
   <div class="row2">
-    <div class="field"><label>Status</label><select id="f-status"><option value="todo">To do</option><option value="active">Active</option><option value="blocked">Blocked</option><option value="done">Done</option></select></div>
-    <div class="field"><label>Due (optional)</label><input id="f-due" type="date"></div>
+    <div class="field"><label>Status</label><select id="f-status"><option value="todo">to do</option><option value="active">active</option><option value="blocked">blocked</option><option value="done">done</option></select></div>
+    <div class="field"><label>Due</label><input id="f-due" type="date"></div>
   </div>
-  <div class="field"><label>Notes</label><textarea id="f-notes"></textarea></div>
-  <div class="modal-actions">
-    <button class="link danger" id="deleteBtn">Delete</button>
-    <div class="right"><button class="link" id="taskCancel">Cancel</button><button class="btn primary" id="taskSave">Save</button></div>
-  </div>
-</div></div>
-
-<!-- week in review -->
-<div class="scrim" id="wirScrim"><div class="modal wide">
-  <div id="wirBody"></div>
-  <div class="modal-actions"><span class="link" id="wirRange"></span><div class="right"><button class="btn primary" id="wirClose">Onward →</button></div></div>
+  <div class="field"><label>Labels (comma-separated)</label><input id="f-labels" placeholder="experiment, writing, urgent"></div>
+  <div class="field"><label>Notes</label><textarea id="f-notes" rows="2"></textarea></div>
+  <div class="field"><label>Subtasks</label><div id="f-subs"></div><button class="btn" id="addSub" style="padding:4px 10px;font-size:12px;margin-top:4px"><i class="ti ti-plus"></i>Add subtask</button></div>
+  <div class="field" id="cmtWrap" style="display:none"><label>Comments</label><div id="f-cmts"></div><div style="display:flex;gap:6px;margin-top:6px"><input id="f-cmt" placeholder="Add a comment…" style="flex:1"><button class="btn" id="addCmt" style="padding:5px 11px">Post</button></div></div>
+  <div class="field" id="actWrap" style="display:none"><label>Activity</label><div id="f-act"></div></div>
+  <div class="acts"><button class="btn btn-primary" id="taskSave">Save</button><button class="btn" id="taskCancel">Cancel</button><button class="btn btn-danger" id="deleteBtn" style="margin-left:auto;display:none">Delete</button></div>
 </div></div>
 
 <!-- settings -->
 <div class="scrim" id="setScrim"><div class="modal">
-  <h3>GitHub Sync</h3>
-  <div class="field"><label>Fine-grained personal access token</label><input id="f-token" type="password" placeholder="github_pat_…"></div>
-  <div class="note">Create a <b>fine-grained PAT</b> scoped to <b>only</b> the <b>dissertation-tracker-data</b> repo, <b>Contents: Read &amp; write</b>. Stored only in this browser's localStorage; sent only to api.github.com; never committed.</div>
-  <div class="field" style="margin-top:13px"><label>Data repo (owner/repo/path)</label><input id="f-repo" type="text"></div>
-  <div class="modal-actions"><span class="link danger" id="tokenClear">Clear token</span><div class="right"><button class="link" id="setCancel">Close</button><button class="btn primary" id="setSave">Save &amp; Pull</button></div></div>
+  <h3>Settings<button class="icbtn x" id="setClose"><i class="ti ti-x"></i></button></h3>
+  <div class="field"><label>GitHub access token (fine-grained PAT)</label><input id="f-token" type="password" placeholder="github_pat_…"></div>
+  <div class="field"><label>Data repo (owner/repo/path)</label><input id="f-repo" placeholder="mattlmccoy/dissertation-tracker-data/tasks.json"></div>
+  <div class="row2">
+    <div class="field"><label>Defense date</label><input id="f-defense" type="date"></div>
+    <div class="field"><label>Theme</label><select id="f-mode"><option value="light">Light</option><option value="dark">Dark</option></select></div>
+  </div>
+  <div class="field"><label>Phases (comma-separated, in order)</label><input id="f-phases" placeholder="DoE, Papers, …"></div>
+  <div class="acts"><button class="btn btn-primary" id="setSave">Save</button><button class="btn" id="setCancel">Cancel</button><button class="btn btn-danger" id="tokenClear" style="margin-left:auto">Clear token</button></div>
 </div></div>
 
-<!-- spec PDF viewer -->
-<div class="scrim" id="specScrim"><div class="modal" style="width:min(920px,100%);height:85vh;display:flex;flex-direction:column">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px">
-    <h3 id="specTitle" style="margin:0;font-size:17px">Spec</h3>
-    <div style="display:flex;gap:10px;align-items:center"><button class="btn" id="specOpen">Open in tab ↗</button><button class="link" id="specClose">Close</button></div>
-  </div>
-  <iframe id="specFrame" title="project spec" style="flex:1;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>
+<!-- week in review -->
+<div class="scrim" id="wirScrim"><div class="modal">
+  <h3>Week in review <span id="wirRange" style="font-size:11px;color:var(--text-3);font-weight:400;margin-left:8px"></span><button class="icbtn x" id="wirClose"><i class="ti ti-x"></i></button></h3>
+  <div id="wirBody"></div>
+</div></div>
+
+<!-- spec viewer -->
+<div class="scrim" id="specScrim"><div class="modal" style="width:min(900px,96%)">
+  <h3><span id="specTitle">Spec</span><button class="icbtn x" id="specClose"><i class="ti ti-x"></i></button></h3>
+  <iframe class="spec" id="specFrame"></iframe>
 </div></div>
 
 <div class="toast" id="toast"></div>
-
 <script>
-/* ===================== config ===================== */
 const DEFAULT_REPO="mattlmccoy/dissertation-tracker-data/tasks.json";
-const LS={tok:"rfam_tracker_pat",repo:"rfam_tracker_repo",cache:"rfam_tracker_cache",theme:"rfam_theme",mode:"rfam_mode"};
-const PHASE_VAR={"DoE & Validation":"--ph-doe","Papers":"--ph-papers","Novelty":"--ph-novelty","Lab & Experiments":"--ph-lab","Undergrad Projects":"--ph-undergrad","Dissertation":"--ph-diss","Future Work":"--ph-future"};
-const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const phaseColor=p=>cssv(PHASE_VAR[p]||"--muted");
-const PRIO_VAR={P0:"--p0",P1:"--p1",P2:"--p2"};
-
-const THEMES={
-  ember:{label:"Ember",sw:"#e0a050",
-    dark:{bg:"#15120e",bg2:"#1b1610",panel:"#221c15",panel2:"#2a2319",text:"#ece4d5",text2:"#bcae98",muted:"#8d8270",line:"rgba(236,228,213,.10)",accent:"#e0a050",accent2:"#d2603a"},
-    light:{bg:"#f5f0e6",bg2:"#ece5d8",panel:"#fcf8f0",panel2:"#f1e9da",text:"#2a2017",text2:"#5c4f3c",muted:"#897d68",line:"rgba(40,30,20,.13)",accent:"#b06a1f",accent2:"#bd4a26"}},
-  slate:{label:"Slate",sw:"#6aa6c4",
-    dark:{bg:"#0f1316",bg2:"#141a1f",panel:"#1a232a",panel2:"#212d35",text:"#e2e8ec",text2:"#9fb0bb",muted:"#71828d",line:"rgba(226,232,236,.10)",accent:"#6aa6c4",accent2:"#e08a5a"},
-    light:{bg:"#eef2f5",bg2:"#e3eaef",panel:"#f8fafb",panel2:"#eaf0f4",text:"#1a242b",text2:"#4a5963",muted:"#74838c",line:"rgba(20,30,40,.12)",accent:"#2f7da3",accent2:"#bd5f2e"}},
-  moss:{label:"Moss",sw:"#7fae6e",
-    dark:{bg:"#10130e",bg2:"#161b12",panel:"#1c241a",panel2:"#232d20",text:"#e6ecdf",text2:"#a8b89c",muted:"#76836c",line:"rgba(230,236,223,.10)",accent:"#7fae6e",accent2:"#d39a52"},
-    light:{bg:"#eef2e9",bg2:"#e3eadd",panel:"#f8fbf4",panel2:"#ecf2e6",text:"#1c241a",text2:"#4c5944",muted:"#6f7d66",line:"rgba(25,35,20,.12)",accent:"#4f7d3f",accent2:"#b87a2c"}},
-  plum:{label:"Plum",sw:"#b07cc6",
-    dark:{bg:"#140f16",bg2:"#1a141d",panel:"#221a26",panel2:"#2b2130",text:"#ece2ef",text2:"#bca8c4",muted:"#897d8f",line:"rgba(236,226,239,.10)",accent:"#b07cc6",accent2:"#e08aa0"},
-    light:{bg:"#f3eef5",bg2:"#e9e2ec",panel:"#fbf7fc",panel2:"#f0e9f2",text:"#261b29",text2:"#574a5c",muted:"#857789",line:"rgba(35,25,40,.12)",accent:"#8a4fa3",accent2:"#bd4f72"}}
-};
-
-let DB=null, SHA=null, DIRTY=false, VIEW="today", FILTER=null, editingId=null;
+const LS={tok:"rfam_tracker_pat",repo:"rfam_tracker_repo",cache:"rfam_tracker_cache",mode:"rfam_mode"};
+const PRIO={P0:"--p0",P1:"--p1",P2:"--p2"};
+const ME="matt";   // author stamp on this (owner) view
+let DB=null, SHA=null, DIRTY=false, VIEW="today", FILTER=null, Q="", FS="", FP="", FL="", SORT="manual", editingId=null;
 const UNDO=[];
-
-/* ===================== utils ===================== */
 const $=s=>document.querySelector(s);
 const token=()=>localStorage.getItem(LS.tok)||"";
 const repoCfg=()=>localStorage.getItem(LS.repo)||DEFAULT_REPO;
 const repoParts=()=>{const p=repoCfg().split("/");return{owner:p[0],repo:p[1],path:p.slice(2).join("/")||"tasks.json"}};
 const today=()=>new Date().toISOString().slice(0,10);
+const nowts=()=>new Date().toISOString();
 const days=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const b64e=s=>btoa(unescape(encodeURIComponent(s)));
 const b64d=b=>decodeURIComponent(escape(atob(b.replace(/\n/g,""))));
 const uid=()=>"t"+Math.random().toString(36).slice(2,8);
 const esc=s=>(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));
-let tt;const toast=(m,e)=>{const t=$("#toast");t.textContent=m;t.className="toast on"+(e?" err":"");clearTimeout(tt);tt=setTimeout(()=>t.className="toast",2500)};
-const saveCache=()=>localStorage.setItem(LS.cache,JSON.stringify(DB));
-const markDirty=()=>{DIRTY=true;DB.meta.updated=today();saveCache();renderSync();$("#updatedAt").textContent="edited "+DB.meta.updated+" · unsynced"};
+const cssv=v=>`var(${v})`;
 const st=t=>t.status||"todo";
+let tt;const toast=(m,e)=>{const t=$("#toast");t.textContent=m;t.className="toast on"+(e?" err":"");clearTimeout(tt);tt=setTimeout(()=>t.className="toast",2400)};
 
-/* ===================== theme ===================== */
-function applyTheme(){
-  const th=localStorage.getItem(LS.theme)||"ember", md=localStorage.getItem(LS.mode)||"dark";
-  const vars=(THEMES[th]||THEMES.ember)[md];
-  const r=document.documentElement;
-  r.dataset.theme=th; r.dataset.mode=md;
-  for(const k in vars) r.style.setProperty("--"+k,vars[k]);
-  $("#modeBtn").textContent=md==="dark"?"☾":"☀";
-  document.querySelectorAll(".sw").forEach(s=>s.classList.toggle("on",s.dataset.t===th));
-}
-function buildSwatches(){
-  const box=$("#swatches"); box.innerHTML="";
-  Object.entries(THEMES).forEach(([k,v])=>{
-    const b=document.createElement("button");b.className="sw";b.dataset.t=k;b.style.background=v.sw;b.title=v.label;
-    b.onclick=()=>{localStorage.setItem(LS.theme,k);applyTheme();render()};box.appendChild(b);
-  });
-}
-$("#modeBtn").onclick=()=>{localStorage.setItem(LS.mode,(localStorage.getItem(LS.mode)||"dark")==="dark"?"light":"dark");applyTheme();render()};
+function applyMode(){const md=localStorage.getItem(LS.mode)||"light";document.documentElement.classList.toggle("dark",md==="dark");$("#modeBtn").innerHTML=`<i class="ti ti-${md==="dark"?"sun":"moon"}"></i>`}
+$("#modeBtn").onclick=()=>{localStorage.setItem(LS.mode,(localStorage.getItem(LS.mode)||"light")==="light"?"dark":"light");applyMode()};
 
-/* ===================== GitHub I/O ===================== */
+/* GitHub I/O */
 async function ghPull(){
-  if(!token()){toast("Add a token in settings to sync",1);return false}
-  const {owner,repo,path}=repoParts();
-  const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,{headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"}});
-  if(!r.ok){toast("Pull failed: "+r.status,1);return false}
-  const j=await r.json();SHA=j.sha;DB=JSON.parse(b64d(j.content));DIRTY=false;saveCache();render();renderSync();
-  $("#updatedAt").textContent="synced "+(DB.meta.updated||today());toast("Pulled latest");return true;
+  if(!token()){$("#needtok").style.display="";loadCache();return}
+  $("#needtok").style.display="none";const {owner,repo,path}=repoParts();
+  try{const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,{headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"}});
+    if(!r.ok){toast("Pull failed: "+r.status,1);loadCache();return}
+    const j=await r.json();SHA=j.sha;DB=normalize(JSON.parse(b64d(j.content)));DIRTY=false;localStorage.setItem(LS.cache,JSON.stringify(DB));render();toast("Pulled latest");
+  }catch(e){toast("Offline — using cache",1);loadCache()}
 }
+function loadCache(){const c=localStorage.getItem(LS.cache);DB=normalize(c?JSON.parse(c):{meta:{phases:[],defenseDate:"2026-10-15"},tasks:[]});render()}
+function normalize(db){db.meta=db.meta||{};db.meta.phases=db.meta.phases||[];db.tasks=(db.tasks||[]).map((t,i)=>({order:i,subtasks:[],labels:[],comments:[],activity:[],...t}));return db}
 async function ghPush(){
   if(!token()){openSettings();return}
   const {owner,repo,path}=repoParts();DB.meta.updated=today();
-  const body={message:"tracker update "+new Date().toISOString(),content:b64e(JSON.stringify(DB,null,2)+"\n")};if(SHA)body.sha=SHA;
-  const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,{method:"PUT",headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"},body:JSON.stringify(body)});
-  if(r.status===409){toast("Conflict — pull first",1);return}
-  if(!r.ok){toast("Push failed: "+r.status,1);return}
-  const j=await r.json();SHA=j.content.sha;DIRTY=false;saveCache();renderSync();$("#updatedAt").textContent="synced "+DB.meta.updated;toast("Pushed to GitHub");
+  const body={message:"tracker update "+nowts(),content:b64e(JSON.stringify(DB,null,2)+"\n")};if(SHA)body.sha=SHA;
+  try{const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,{method:"PUT",headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"},body:JSON.stringify(body)});
+    if(r.status===409){toast("Conflict — pull first",1);return} if(!r.ok){toast("Push failed: "+r.status,1);return}
+    const j=await r.json();SHA=j.content.sha;DIRTY=false;render();toast("Pushed to GitHub");
+  }catch(e){toast("Push failed",1)}
 }
+$("#syncBtn").onclick=()=>DIRTY?ghPush():ghPull();
+function markDirty(){DIRTY=true;DB.meta.updated=today();localStorage.setItem(LS.cache,JSON.stringify(DB));render()}
 
-/* ===================== task ops ===================== */
-function setStatus(id,status){
-  const t=DB.tasks.find(x=>x.id===id);if(!t)return;
-  UNDO.push({id,status:t.status,completedAt:t.completedAt||null});
-  if(UNDO.length>50)UNDO.shift();
-  t.status=status;
-  if(status==="done"){t.completedAt=today()}else{delete t.completedAt}
-  $("#undoBtn").disabled=false;markDirty();render();
-}
-function toggleDone(id){const t=DB.tasks.find(x=>x.id===id);setStatus(id,st(t)==="done"?"todo":"done")}
-$("#undoBtn").onclick=()=>{
-  const u=UNDO.pop();if(!u)return;const t=DB.tasks.find(x=>x.id===u.id);if(t){t.status=u.status;if(u.completedAt)t.completedAt=u.completedAt;else delete t.completedAt}
-  $("#undoBtn").disabled=!UNDO.length;markDirty();render();toast("Undone");
-};
+/* task ops + activity log */
+const find=id=>DB.tasks.find(x=>x.id===id);
+function logAct(t,msg){t.activity=t.activity||[];t.activity.unshift({ts:nowts(),by:ME,msg})}
+function setStatus(id,status){const t=find(id);if(!t||st(t)===status)return;UNDO.push({id,status:t.status,completedAt:t.completedAt||null});if(UNDO.length>50)UNDO.shift();
+  logAct(t,`status ${st(t)} → ${status}`);t.status=status;if(status==="done")t.completedAt=today();else delete t.completedAt;$("#undoBtn").disabled=false;markDirty()}
+function toggleDone(id){const t=find(id);setStatus(id,st(t)==="done"?"todo":"done")}
+$("#undoBtn").onclick=()=>{const u=UNDO.pop();if(!u)return;const t=find(u.id);if(t){t.status=u.status;u.completedAt?t.completedAt=u.completedAt:delete t.completedAt}$("#undoBtn").disabled=!UNDO.length;markDirty();toast("Undone")};
 
-/* ===================== filtering / views ===================== */
-const passPhase=t=>!FILTER||t.phase===FILTER;
+/* phases / colors */
+const PH_COLORS=["#2c64c4","#0f6e56","#9a6a12","#7a3ea0","#b3261e","#1d7a8c","#9a4a6a"];
+const phaseColor=ph=>PH_COLORS[Math.max(0,(DB.meta.phases||[]).indexOf(ph))%PH_COLORS.length];
+
+/* filtering + sorting */
 const prioRank={P0:0,P1:1,P2:2};
-const openSort=(a,b)=>(prioRank[a.priority]??3)-(prioRank[b.priority]??3)||((a.due||"9999")<(b.due||"9999")?-1:1);
-const doneSort=(a,b)=>((b.completedAt||"")<(a.completedAt||"")?-1:1);
+const allLabels=()=>[...new Set(DB.tasks.flatMap(t=>t.labels||[]))].sort();
+function matches(t){
+  if(FILTER&&t.phase!==FILTER)return false;
+  if(FS&&st(t)!==FS)return false;
+  if(FP&&(t.priority||"P2")!==FP)return false;
+  if(FL&&!(t.labels||[]).includes(FL))return false;
+  if(Q){const h=(t.title+" "+(t.notes||"")+" "+t.phase+" "+(t.labels||[]).join(" ")).toLowerCase();if(!h.includes(Q.toLowerCase()))return false}
+  return true;
+}
+function sortTasks(ts){
+  const byDue=(a,b)=>((a.due||"9999")<(b.due||"9999")?-1:1);
+  const byPrio=(a,b)=>(prioRank[a.priority]??3)-(prioRank[b.priority]??3)||byDue(a,b);
+  const byRecent=(a,b)=>((b.completedAt||"")<(a.completedAt||"")?-1:1);
+  const byManual=(a,b)=>(a.order??1e9)-(b.order??1e9);
+  return [...ts].sort(SORT==="due"?byDue:SORT==="recent"?byRecent:SORT==="prio"?byPrio:byManual);
+}
 const isFocusOpen=t=>st(t)!=="done"&&(st(t)==="active"||t.cadence==="daily"||t.cadence==="weekly"||(t.due&&days(today(),t.due)<=0));
-const doneOn=(t,n)=>st(t)==="done"&&t.completedAt&&days(t.completedAt,today())<n;
+const doneWithin=(t,n)=>st(t)==="done"&&t.completedAt&&days(t.completedAt,today())<n;
 
-function splitSorted(open,done){return open.sort(openSort).concat(done.sort(doneSort))}
+/* card render */
+function subProgress(t){const s=t.subtasks||[];if(!s.length)return"";const d=s.filter(x=>x.done).length;return `<span class="miniprog"><i class="ti ti-checklist"></i>${d}/${s.length}</span>`}
+function labelChips(t){return (t.labels||[]).map(l=>`<span class="lblchip">${esc(l)}</span>`).join("")}
+function cmtCount(t){const n=(t.comments||[]).length;return n?`<span class="miniprog"><i class="ti ti-message-circle"></i>${n}</span>`:""}
+function taskCard(t){
+  const done=st(t)==="done",c=phaseColor(t.phase),over=t.due&&days(today(),t.due)<0&&!done;
+  const due=t.due?`<span class="chip" style="${over?"color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)":""}"><i class="ti ti-calendar"></i>${t.due}</span>`:"";
+  const sta=(st(t)!=="todo"&&!done)?`<span class="chip">${st(t)}</span>`:"";
+  const when=done&&t.completedAt?`<span class="chip" style="color:var(--success)"><i class="ti ti-check"></i>${t.completedAt}</span>`:"";
+  return `<div class="task ${done?"done":""}" data-id="${t.id}" draggable="true" style="--lc:${cssv(PRIO[t.priority]||"--p2")}">
+    <div class="check ${done?"on":""}" data-check="${t.id}"><i class="ti ti-check"></i></div>
+    <div style="flex:1;min-width:0"><div class="ttitle">${esc(t.title)}</div>
+    <div class="tmeta"><span class="chip" style="color:${cssv(PRIO[t.priority]||"--p2")};border-color:color-mix(in srgb,${cssv(PRIO[t.priority]||"--p2")} 40%,transparent)">${t.priority||"P2"}</span>${sta}${when}${due}${subProgress(t)}${cmtCount(t)}${labelChips(t)}<span class="chip" style="color:${c};border-color:color-mix(in srgb,${c} 40%,transparent)">${esc(t.phase||"")}</span></div>
+    ${t.notes?`<div class="tnote">${esc(t.notes)}</div>`:""}</div></div>`;
+}
+function kCard(t){const done=st(t)==="done",c=phaseColor(t.phase);
+  return `<div class="kcard ${done?"done":""}" draggable="true" data-id="${t.id}" style="--lc:${cssv(PRIO[t.priority]||"--p2")}">
+    <div class="kt">${esc(t.title)}</div><div class="km"><span class="chip" style="color:${cssv(PRIO[t.priority]||"--p2")}">${t.priority||"P2"}</span>${subProgress(t)}${cmtCount(t)}<span class="chip" style="color:${c}">${esc((t.phase||"").split(" ")[0])}</span></div></div>`;
+}
 
+/* views */
 function listView(){
-  const all=DB.tasks.filter(passPhase);
-  let open,done,label;
-  if(VIEW==="today"){
-    open=all.filter(isFocusOpen);
-    done=all.filter(t=>doneOn(t,1));
-    label="In focus today";
-  }else{
-    open=all.filter(t=>st(t)!=="done"&&(st(t)==="active"||t.cadence==="daily"||t.cadence==="weekly"||(t.due&&days(today(),t.due)<=7)));
-    done=all.filter(t=>doneOn(t,7));
-    label="Active · due · completed this week";
-  }
-  const items=splitSorted(open,done);
-  const g=document.createElement("div");g.className="group";
-  g.innerHTML=`<h2>${label} <span class="cnt">${open.length} open · ${done.length} done</span></h2>`+
-    (items.length?items.map(taskCard).join(""):`<div class="empty">Nothing here ${FILTER?"in "+FILTER:""}. Try the Board, or add a task.</div>`);
-  $("#list").appendChild(g);
+  const all=DB.tasks.filter(matches);let open,done,label;
+  if(VIEW==="today"){open=all.filter(isFocusOpen);done=all.filter(t=>doneWithin(t,1));label="In focus today"}
+  else if(VIEW==="week"){open=all.filter(t=>st(t)!=="done"&&(st(t)==="active"||t.cadence==="daily"||t.cadence==="weekly"||(t.due&&days(today(),t.due)<=7)));done=all.filter(t=>doneWithin(t,7));label="This week"}
+  else{open=all.filter(t=>st(t)!=="done");done=all.filter(t=>st(t)==="done");label="All tasks"}
+  const items=sortTasks(open).concat(VIEW==="all"||VIEW==="week"||VIEW==="today"?(SORT==="recent"?sortTasks(done):done):done);
+  $("#list").innerHTML=`<div class="group" id="dropzone"><h2>${label} <span class="cnt">${open.length} open · ${done.length} done</span></h2>${items.length?items.map(taskCard).join(""):`<div class="empty">Nothing matches. Adjust filters or add a task.</div>`}</div>`;
+  enableReorder($("#dropzone"));
 }
 function boardView(){
-  DB.meta.phases.forEach(ph=>{
-    if(FILTER&&ph!==FILTER)return;
-    const ts=DB.tasks.filter(t=>t.phase===ph);if(!ts.length)return;
-    const open=ts.filter(t=>st(t)!=="done"),done=ts.filter(t=>st(t)==="done");
-    const items=splitSorted(open,done);
-    const c=phaseColor(ph);
-    const g=document.createElement("div");g.className="group";
-    g.innerHTML=`<h2><i style="background:${c}"></i>${ph} <span class="cnt">${done.length}/${ts.length} done</span></h2>`+items.map(taskCard).join("");
-    $("#list").appendChild(g);
-  });
+  const out=[];(DB.meta.phases||[]).forEach(ph=>{if(FILTER&&ph!==FILTER)return;const ts=DB.tasks.filter(t=>t.phase===ph&&matches(t));if(!ts.length)return;
+    const open=ts.filter(t=>st(t)!=="done"),done=ts.filter(t=>st(t)==="done");const items=sortTasks(open).concat(done);
+    out.push(`<div class="group"><h2><i class="pdot" style="background:${phaseColor(ph)}"></i>${esc(ph)} <span class="cnt">${done.length}/${ts.length} done</span></h2>${items.map(taskCard).join("")}</div>`)});
+  $("#list").innerHTML=out.join("")||`<div class="empty">No tasks match.</div>`;
 }
 const COLS=[["todo","To do"],["active","Active"],["blocked","Blocked"],["done","Done"]];
+const WIP={active:0};   // 0 = no limit; editable later
 function kanbanView(){
   const wrap=document.createElement("div");wrap.className="kanban";
-  COLS.forEach(([s,lbl])=>{
-    let ts=DB.tasks.filter(t=>passPhase(t)&&st(t)===s);
-    ts=s==="done"?ts.sort(doneSort):ts.sort(openSort);
+  COLS.forEach(([s,lbl])=>{let ts=DB.tasks.filter(t=>matches(t)&&st(t)===s);ts=sortTasks(ts);
     const col=document.createElement("div");col.className="kcol";col.dataset.col=s;
-    col.innerHTML=`<h3>${lbl}<span>${ts.length}</span></h3>`+ts.map(kCard).join("");
+    const wip=WIP[s]?` / ${WIP[s]}`:"";const over=WIP[s]&&ts.length>WIP[s];
+    col.innerHTML=`<h3>${lbl}<span style="${over?"color:var(--danger)":""}">${ts.length}${wip}</span></h3>`+ts.map(kCard).join("");
+    if(over)col.classList.add("over");
     col.addEventListener("dragover",e=>{e.preventDefault();col.classList.add("drop")});
     col.addEventListener("dragleave",()=>col.classList.remove("drop"));
     col.addEventListener("drop",e=>{e.preventDefault();col.classList.remove("drop");const id=e.dataTransfer.getData("id");if(id)setStatus(id,s)});
-    wrap.appendChild(col);
-  });
-  $("#list").appendChild(wrap);
+    wrap.appendChild(col)});
+  $("#list").innerHTML="";$("#list").appendChild(wrap);
 }
 function ganttView(){
-  const all=DB.tasks.filter(passPhase);
-  const done=all.filter(t=>st(t)==="done"&&t.completedAt).sort(doneSort);
-  if(!done.length){$("#list").innerHTML=`<div class="empty">No completed tasks with dates ${FILTER?"in "+FILTER:""} yet.</div>`;return}
-  const dates=done.map(t=>t.completedAt);
-  let min=dates.reduce((a,b)=>a<b?a:b),max=today();
-  const span=Math.max(1,days(min,max));const cols=[];for(let i=0;i<=span;i++){const d=new Date(min);d.setDate(d.getDate()+i);cols.push(d.toISOString().slice(0,10))}
-  const phases=DB.meta.phases.filter(ph=>!FILTER||ph===FILTER);
-  const byCell={};done.forEach(t=>{(byCell[t.phase+"|"+t.completedAt]=byCell[t.phase+"|"+t.completedAt]||[]).push(t)});
-  // ---- section 1: completion-activity heatmap ----
-  const hist=cols.map(d=>done.filter(t=>t.completedAt===d).length);const hmax=Math.max(...hist,1);
-  let html=`<div class="gsec-title">Completion activity (retrospective)</div><div class="gantt-wrap"><div class="ghist"><div class="glabel">completions/day</div><div class="ghbars">`+
-    cols.map((d,i)=>`<div class="ghbar" style="height:${Math.round(hist[i]/hmax*42)}px" title="${d}: ${hist[i]}"></div>`).join("")+`</div></div><div class="gantt">`;
-  phases.forEach(ph=>{
-    const c=phaseColor(ph);
-    html+=`<div class="grow"><div class="glabel"><i style="background:${c}"></i>${ph}</div><div class="gtrack">`+
-      cols.map(d=>{const cell=byCell[ph+"|"+d];if(cell){const ids=cell.map(t=>t.id).join(",");return `<div class="gcell has" style="background:${c}" data-ids="${ids}" title="${esc(cell.map(t=>t.title).join(' · '))}">${cell.length>1?cell.length:""}</div>`}return `<div class="gcell" style="background:color-mix(in srgb,var(--text) 6%,transparent)"></div>`}).join("")+
-      `</div></div>`;
-  });
-  html+=`</div><div class="gaxis"><div></div><div class="gticks">`+cols.map(d=>`<div class="gtick">${(""+(+d.slice(8,10)))}${d.slice(8,10)==="01"?"/"+d.slice(5,7):""}</div>`).join("")+`</div></div>`;
-  // ---- section 2: classic task-bar gantt ----
-  const pct=d=>Math.max(0,Math.min(100,days(min,d)/span*100));
-  const N=7,ticks=[];for(let i=0;i<=N;i++){const dt=new Date(min);dt.setDate(dt.getDate()+Math.round(span*i/N));ticks.push(dt.toISOString().slice(0,10))}
-  let bg=`<div class="gsec-title">Task timeline <span style="color:var(--muted);text-transform:none;letter-spacing:0"> — done tasks as retrospective bars (gap = time since previous completion); open tasks marked at “now”</span></div>`+
-    `<div class="gbars"><div class="gbaxis"><div></div><div class="ticks">`+
-    ticks.map((d,i)=>`<span style="left:${Math.min(99,i/N*100)}%">${d.slice(5)}</span>`).join("")+`</div></div>`;
-  phases.forEach(ph=>{
-    const ts=all.filter(t=>t.phase===ph);if(!ts.length)return;
-    const c=phaseColor(ph);
-    bg+=`<div class="gbphase"><i style="background:${c}"></i>${ph}</div>`;
-    const dts=ts.filter(t=>st(t)==="done"&&t.completedAt).sort((a,b)=>a.completedAt<b.completedAt?-1:1);
-    let prev=min;
-    dts.forEach(t=>{const l=pct(prev),w=Math.max(1.5,pct(t.completedAt)-l);
-      bg+=`<div class="gbrow done"><div class="gblabel" title="${esc(t.title)}">${esc(t.title)}</div><div class="gbtrack"><div class="gbbar" data-id="${t.id}" title="${esc(t.title)} — done ${t.completedAt}" style="left:${l}%;width:${w}%;background:${c}"></div></div></div>`;
-      prev=t.completedAt;});
-    ts.filter(t=>st(t)!=="done").sort(openSort).forEach(t=>{
-      const s=st(t),cls=s==="active"?"active":s==="blocked"?"blocked":"";
-      bg+=`<div class="gbrow"><div class="gblabel" title="${esc(t.title)}">${esc(t.title)}</div><div class="gbtrack"><div class="gbpill ${cls}" data-id="${t.id}">${s==="active"?"in progress":s==="blocked"?"blocked":"to do"} · now</div></div></div>`;});
-  });
-  bg+=`</div>`;
-  const div=document.createElement("div");div.innerHTML=html+bg;$("#list").appendChild(div);
+  const done=DB.tasks.filter(t=>matches(t)&&st(t)==="done"&&t.completedAt).sort((a,b)=>a.completedAt<b.completedAt?-1:1);
+  if(!done.length){$("#list").innerHTML=`<div class="empty">No completed tasks with dates yet.</div>`;return}
+  const min=done[0].completedAt,max=today(),span=Math.max(1,days(min,max));
+  const cols=[];for(let i=0;i<=span;i++){const d=new Date(min);d.setDate(d.getDate()+i);cols.push(d.toISOString().slice(0,10))}
+  const hist=cols.map(d=>done.filter(t=>t.completedAt===d).length),hmax=Math.max(...hist,1);
+  const phases=(DB.meta.phases||[]).filter(ph=>!FILTER||ph===FILTER);
+  const byCell={};done.forEach(t=>(byCell[t.phase+"|"+t.completedAt]=byCell[t.phase+"|"+t.completedAt]||[]).push(t));
+  let html=`<div class="group"><h2>Completion activity <span class="cnt">${done.length} done across ${span+1} days</span></h2>`+
+    `<div class="ghbars">`+cols.map((d,i)=>`<div class="ghbar" style="height:${Math.round(hist[i]/hmax*42)+2}px" title="${d}: ${hist[i]}"></div>`).join("")+`</div><div class="gantt">`;
+  phases.forEach(ph=>{const c=phaseColor(ph);if(!done.some(t=>t.phase===ph))return;
+    html+=`<div class="grow"><div class="glabel"><i style="background:${c}"></i>${esc(ph)}</div><div class="gtrack">`+
+      cols.map(d=>{const cell=byCell[ph+"|"+d];return cell?`<div class="gcell has" style="background:${c}" data-id="${cell[0].id}" title="${esc(cell.map(t=>t.title).join(' · '))}"></div>`:`<div class="gcell"></div>`}).join("")+`</div></div>`});
+  html+=`</div></div>`;$("#list").innerHTML=html;
 }
 
-/* ===================== rendering ===================== */
-function chip(cls,txt,extra=""){return `<span class="chip ${cls}" ${extra}>${txt}</span>`}
-function taskCard(t){
-  const c=phaseColor(t.phase),done=st(t)==="done";
-  let due="";if(t.due){const over=days(today(),t.due)<0&&!done;due=chip("due"+(over?" over":""),"⌑ "+t.due)}
-  const cad=(t.cadence&&t.cadence!=="once")?chip("cad","↻ "+t.cadence):"";
-  const stc=(st(t)!=="todo"&&!done)?chip("","● "+st(t)):"";
-  const when=done&&t.completedAt?chip("when","✓ "+t.completedAt):"";
-  return `<div class="task ${done?"done":""}" data-id="${t.id}" style="--lc:${cssv(PRIO_VAR[t.priority]||"--p2")}">
-    <div class="check ${done?"on":""}" data-check="${t.id}"></div>
-    <div class="tbody"><div class="ttitle">${esc(t.title)}</div>
-    <div class="tmeta"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span>${stc}${when}${due}${cad}${t.doc?`<span class="chip docbtn" data-doc="${esc(t.doc)}" style="cursor:pointer;color:var(--ph-undergrad);border-color:color-mix(in srgb,var(--ph-undergrad) 45%,transparent)">📄 spec</span>`:""}<span class="chip" style="color:${c}">${t.phase}</span></div>
-    ${t.notes?`<div class="tnote">${esc(t.notes)}</div>`:""}</div></div>`;
+/* drag reorder (list views) */
+function enableReorder(zone){
+  let dragId=null;
+  zone.querySelectorAll(".task").forEach(card=>{
+    card.addEventListener("dragstart",e=>{dragId=card.dataset.id;card.classList.add("dragging");e.dataTransfer.effectAllowed="move"});
+    card.addEventListener("dragend",()=>card.classList.remove("dragging"));
+    card.addEventListener("dragover",e=>{e.preventDefault();const d=zone.querySelector(".dragging");if(!d||d===card)return;const r=card.getBoundingClientRect();card.parentNode.insertBefore(d,(e.clientY-r.top)/r.height<.5?card:card.nextSibling)});
+  });
+  zone.addEventListener("drop",e=>{e.preventDefault();if(!dragId)return;const ids=[...zone.querySelectorAll(".task")].map(c=>c.dataset.id);ids.forEach((id,i)=>{const t=find(id);if(t)t.order=i});SORT="manual";$("#sort").value="manual";markDirty()});
 }
-function kCard(t){
-  const c=phaseColor(t.phase),done=st(t)==="done";
-  return `<div class="kcard ${done?"done":""}" draggable="true" data-id="${t.id}" style="--lc:${cssv(PRIO_VAR[t.priority]||"--p2")}">
-    <div class="kt">${esc(t.title)}</div>
-    <div class="km"><span class="chip" style="color:${cssv(PRIO_VAR[t.priority]||"--p2")}">${t.priority||"P2"}</span><span class="chip" style="color:${c}">${t.phase.split(" ")[0]}</span>${t.doc?`<span class="chip docbtn" data-doc="${esc(t.doc)}" style="cursor:pointer;color:var(--ph-undergrad)">📄</span>`:""}${done&&t.completedAt?chip("when","✓"+t.completedAt.slice(5)):""}</div></div>`;
+
+/* stats / chips / countdown */
+function renderStats(){
+  const t=DB.tasks,done=t.filter(x=>st(x)==="done").length,total=t.length,open=total-done;
+  const wk=t.filter(x=>doneWithin(x,7)).length,tdy=t.filter(x=>doneWithin(x,1)).length;
+  const over=t.filter(x=>st(x)!=="done"&&x.due&&days(today(),x.due)<0).length;
+  const pct=total?Math.round(done/total*100):0,cd=DB.meta.defenseDate?days(today(),DB.meta.defenseDate):null;
+  const pace=(cd&&cd>0&&open)?Math.ceil(open/(cd/7)):0;
+  $("#stats").innerHTML=`
+    <div class="stat"><div class="v">${done}<span style="font-size:14px;color:var(--text-3)">/${total}</span></div><div class="k">tasks complete</div><div class="sub">${pct}% overall</div></div>
+    <div class="stat"><div class="v">${wk}</div><div class="k">done this week</div><div class="sub">${tdy} today</div></div>
+    <div class="stat"><div class="v" style="${over?"color:var(--danger)":""}">${over}</div><div class="k">overdue & open</div></div>
+    <div class="stat"><div class="v">${cd!=null?cd:"—"}</div><div class="k">days to defense</div><div class="sub">${pace?`~${pace}/wk to finish on time`:""}</div></div>`;
 }
 function renderChips(){
-  const box=$("#chips");const counts={};DB.tasks.forEach(t=>counts[t.phase]=(counts[t.phase]||0)+1);
-  const mk=(name,color,n,active)=>`<button class="fchip ${active?"on":""}" data-ph="${name===null?"":esc(name)}" ${color?`style="color:${color}"`:""}>${color?`<i style="background:${color}"></i>`:""}${name||"All"} <span class="n">${n}</span></button>`;
-  box.innerHTML=mk(null,"",DB.tasks.length,!FILTER)+DB.meta.phases.map(p=>mk(p,phaseColor(p),counts[p]||0,FILTER===p)).join("");
-}
-function renderProgress(){
-  const box=$("#progress");box.innerHTML="";
-  DB.meta.phases.forEach(ph=>{const ts=DB.tasks.filter(t=>t.phase===ph);if(!ts.length)return;
-    const done=ts.filter(t=>st(t)==="done").length,pct=Math.round(done/ts.length*100),c=phaseColor(ph);
-    const el=document.createElement("div");el.className="pcard";el.dataset.ph=ph;
-    el.innerHTML=`<div class="ph"><i style="background:${c}"></i>${ph}</div><div class="frac">${done}<span>/${ts.length}</span></div><div class="bar"><i style="width:${pct}%;background:${c}"></i></div>`;
-    el.onclick=()=>{FILTER=FILTER===ph?null:ph;render()};box.appendChild(el);
-  });
+  const counts={};DB.tasks.forEach(t=>counts[t.phase]=(counts[t.phase]||0)+1);
+  const mk=(name,n,on)=>`<button class="fchip ${on?"on":""}" data-ph="${name===null?"":esc(name)}">${name?`<i style="background:${phaseColor(name)}"></i>`:""}${name||"All phases"}<span class="n">${n}</span></button>`;
+  $("#chips").innerHTML=mk(null,DB.tasks.length,!FILTER)+(DB.meta.phases||[]).map(p=>mk(p,counts[p]||0,FILTER===p)).join("");
+  const fl=$("#flabel"),cur=FL;fl.innerHTML=`<option value="">any label</option>`+allLabels().map(l=>`<option ${l===cur?"selected":""}>${esc(l)}</option>`).join("");
 }
 function renderCountdown(){const d=DB.meta.defenseDate;if(!d)return;const n=days(today(),d);$("#cdNum").textContent=n;$("#cdNum").classList.toggle("warn",n<60);$("#cdDate").textContent=new Date(d+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}
-const renderSync=()=>{$("#syncDot").className="dot"+(DIRTY?" dirty":"");$("#syncLbl").textContent=DIRTY?"Push*":"Sync"};
 function render(){
-  renderCountdown();renderChips();renderProgress();
-  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.view===VIEW));
-  const list=$("#list");list.innerHTML="";
-  if(VIEW==="board")boardView();else if(VIEW==="kanban")kanbanView();else if(VIEW==="gantt")ganttView();else listView();
+  if(!DB)return;renderCountdown();renderStats();renderChips();
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.view===VIEW));
+  $("#syncBtn").innerHTML=`<i class="ti ti-${DIRTY?"cloud-up":"refresh"}"></i>`;$("#syncBtn").style.color=DIRTY?"var(--warn)":"";
+  VIEW==="board"?boardView():VIEW==="kanban"?kanbanView():VIEW==="gantt"?ganttView():listView();
 }
 
-/* ===================== interactions ===================== */
+/* interactions */
 $("#tabs").addEventListener("click",e=>{const b=e.target.closest(".tab");if(b){VIEW=b.dataset.view;render()}});
-$("#chips").addEventListener("click",e=>{const b=e.target.closest(".fchip");if(b){const p=b.dataset.ph;FILTER=p?p:null;render()}});
-$("#list").addEventListener("click",e=>{
-  const chk=e.target.closest("[data-check]");if(chk){e.stopPropagation();toggleDone(chk.dataset.check);return}
-  const dc=e.target.closest("[data-doc]");if(dc){e.stopPropagation();openSpec(dc.dataset.doc);return}
-  const g=e.target.closest(".gcell.has");if(g){openEditor(g.dataset.ids.split(",")[0]);return}
-  const card=e.target.closest("[data-id]");if(card)openEditor(card.dataset.id);
-});
+$("#chips").addEventListener("click",e=>{const b=e.target.closest(".fchip");if(b){FILTER=b.dataset.ph||null;render()}});
+$("#list").addEventListener("click",e=>{const chk=e.target.closest("[data-check]");if(chk){e.stopPropagation();toggleDone(chk.dataset.check);return}const card=e.target.closest("[data-id]");if(card)openEditor(card.dataset.id)});
 $("#list").addEventListener("dragstart",e=>{const c=e.target.closest(".kcard");if(c)e.dataTransfer.setData("id",c.dataset.id)});
+$("#q").addEventListener("input",e=>{Q=e.target.value;render()});
+$("#fstatus").addEventListener("change",e=>{FS=e.target.value;render()});
+$("#fprio").addEventListener("change",e=>{FP=e.target.value;render()});
+$("#flabel").addEventListener("change",e=>{FL=e.target.value;render()});
+$("#sort").addEventListener("change",e=>{SORT=e.target.value;render()});
 
-/* spec PDF viewer — fetches from the PRIVATE data repo with the user's token (never public) */
-async function openSpec(path){
-  if(!token()){openSettings();toast("Add your token to view specs",1);return}
-  const {owner,repo}=repoParts();
-  $("#specTitle").textContent=path.split("/").pop();
-  $("#specFrame").src="about:blank";$("#specScrim").classList.add("on");
-  try{
-    const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-      {headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"}});
-    if(!r.ok){toast("Spec fetch failed: "+r.status,1);return}
-    const j=await r.json();
-    const bytes=Uint8Array.from(atob(j.content.replace(/\n/g,"")),c=>c.charCodeAt(0));
-    const url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
-    $("#specFrame").src=url;$("#specOpen").onclick=()=>window.open(url,"_blank");
-  }catch(err){toast("Spec error: "+err.message,1)}
-}
-$("#specClose").onclick=()=>$("#specScrim").classList.remove("on");
-$("#specScrim").addEventListener("click",e=>{if(e.target.id==="specScrim")$("#specScrim").classList.remove("on")});
-
+/* editor */
+let draftSubs=[],draftCmts=[],draftAct=[];
 function openEditor(id){
-  editingId=id||null;
-  const t=id?DB.tasks.find(x=>x.id===id):{phase:DB.meta.phases[0],priority:"P1",status:"todo"};
-  $("#taskModalTitle").textContent=id?"Edit Task":"New Task";
-  $("#f-phase").innerHTML=DB.meta.phases.map(p=>`<option>${p}</option>`).join("");
-  $("#f-title").value=t.title||"";$("#f-phase").value=t.phase;$("#f-priority").value=t.priority||"P1";
-  $("#f-status").value=t.status||"todo";$("#f-due").value=t.due||"";$("#f-notes").value=t.notes||"";
+  editingId=id||null;const t=id?find(id):{phase:DB.meta.phases[0],priority:"P1",status:"todo"};
+  $("#taskModalTitle").firstChild.textContent=id?"Edit task":"New task";
+  $("#f-phase").innerHTML=(DB.meta.phases||[]).map(p=>`<option>${esc(p)}</option>`).join("");
+  $("#f-title").value=t.title||"";$("#f-phase").value=t.phase||(DB.meta.phases||[])[0]||"";$("#f-priority").value=t.priority||"P1";
+  $("#f-status").value=t.status||"todo";$("#f-due").value=t.due||"";$("#f-notes").value=t.notes||"";$("#f-labels").value=(t.labels||[]).join(", ");
+  draftSubs=JSON.parse(JSON.stringify(t.subtasks||[]));draftCmts=t.comments||[];draftAct=t.activity||[];
+  renderSubs();
+  $("#cmtWrap").style.display=id?"block":"none";$("#actWrap").style.display=(id&&draftAct.length)?"block":"none";
+  if(id){renderCmts();renderActLog()}
   $("#deleteBtn").style.display=id?"block":"none";$("#taskScrim").classList.add("on");$("#f-title").focus();
 }
+function renderSubs(){$("#f-subs").innerHTML=draftSubs.map((s,i)=>`<div class="subrow ${s.done?"done":""}"><div class="check ${s.done?"on":""}" data-sub="${i}"><i class="ti ti-check"></i></div><input data-subtext="${i}" value="${esc(s.text)}"><button class="icbtn" data-subdel="${i}" style="width:24px;height:24px"><i class="ti ti-x"></i></button></div>`).join("")}
+$("#f-subs").addEventListener("click",e=>{const c=e.target.closest("[data-sub]");if(c){draftSubs[+c.dataset.sub].done=!draftSubs[+c.dataset.sub].done;renderSubs();return}const d=e.target.closest("[data-subdel]");if(d){draftSubs.splice(+d.dataset.subdel,1);renderSubs()}});
+$("#f-subs").addEventListener("input",e=>{const i=e.target.dataset.subtext;if(i!=null)draftSubs[+i].text=e.target.value});
+$("#addSub").onclick=()=>{draftSubs.push({text:"",done:false});renderSubs();$("#f-subs").querySelector("[data-subtext='"+(draftSubs.length-1)+"']")?.focus()};
+function renderCmts(){$("#f-cmts").innerHTML=draftCmts.map(c=>`<div class="cmt"><div class="who"><b>${esc(c.author||"?")}</b> · ${(c.ts||"").slice(0,10)}</div>${esc(c.text)}</div>`).join("")||`<div style="font-size:12px;color:var(--text-3)">No comments yet.</div>`}
+function renderActLog(){$("#actWrap").style.display=draftAct.length?"block":"none";$("#f-act").innerHTML=draftAct.slice(0,8).map(a=>`<div class="act">${(a.ts||"").slice(0,10)} · ${esc(a.by||"")} ${esc(a.msg)}</div>`).join("")}
+$("#addCmt").onclick=()=>{const v=$("#f-cmt").value.trim();if(!v||!editingId)return;draftCmts.push({author:ME,text:v,ts:nowts()});$("#f-cmt").value="";renderCmts()};
+$("#f-cmt").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("#addCmt").click()}});
 const closeEditor=()=>$("#taskScrim").classList.remove("on");
-$("#addBtn").onclick=()=>openEditor(null);$("#taskCancel").onclick=closeEditor;
+$("#addBtn").onclick=()=>openEditor(null);$("#taskCancel").onclick=closeEditor;$("#taskClose").onclick=closeEditor;
 $("#taskScrim").addEventListener("click",e=>{if(e.target.id==="taskScrim")closeEditor()});
 $("#taskSave").onclick=()=>{
-  const data={title:$("#f-title").value.trim(),phase:$("#f-phase").value,priority:$("#f-priority").value,status:$("#f-status").value,due:$("#f-due").value||null,notes:$("#f-notes").value.trim()};
+  const data={title:$("#f-title").value.trim(),phase:$("#f-phase").value,priority:$("#f-priority").value,status:$("#f-status").value,
+    due:$("#f-due").value||null,notes:$("#f-notes").value.trim(),
+    labels:$("#f-labels").value.split(",").map(s=>s.trim()).filter(Boolean),
+    subtasks:draftSubs.filter(s=>s.text.trim()),comments:draftCmts};
   if(!data.title){toast("Title required",1);return}
-  if(editingId){const t=DB.tasks.find(x=>x.id===editingId);const wasDone=st(t)==="done";Object.assign(t,data);if(data.status==="done"&&!wasDone)t.completedAt=today();if(data.status!=="done")delete t.completedAt}
-  else{const t={id:uid(),cadence:"once",source:"app",...data};if(data.status==="done")t.completedAt=today();DB.tasks.unshift(t)}
-  markDirty();render();closeEditor();
+  if(editingId){const t=find(editingId);const was=st(t);Object.assign(t,data);if(was!==data.status){logAct(t,`status ${was} → ${data.status}`);if(data.status==="done")t.completedAt=today();else delete t.completedAt}t.activity=draftAct}
+  else{const t={id:uid(),order:-1,cadence:"once",source:"app",activity:[{ts:nowts(),by:ME,msg:"created"}],...data};if(data.status==="done")t.completedAt=today();DB.tasks.unshift(t)}
+  markDirty();closeEditor();
 };
-$("#deleteBtn").onclick=()=>{if(editingId&&confirm("Delete this task?")){DB.tasks=DB.tasks.filter(x=>x.id!==editingId);markDirty();render();closeEditor()}};
+$("#deleteBtn").onclick=()=>{if(editingId&&confirm("Delete this task?")){DB.tasks=DB.tasks.filter(x=>x.id!==editingId);markDirty();closeEditor()}};
+
+/* settings */
+function openSettings(){$("#f-token").value=token();$("#f-repo").value=repoCfg();$("#f-defense").value=DB?.meta.defenseDate||"";$("#f-mode").value=localStorage.getItem(LS.mode)||"light";$("#f-phases").value=(DB?.meta.phases||[]).join(", ");$("#setScrim").classList.add("on")}
+$("#setBtn").onclick=openSettings;$("#addtok").onclick=openSettings;$("#setCancel").onclick=()=>$("#setScrim").classList.remove("on");$("#setClose").onclick=()=>$("#setScrim").classList.remove("on");
+$("#setScrim").addEventListener("click",e=>{if(e.target.id==="setScrim")$("#setScrim").classList.remove("on")});
+$("#tokenClear").onclick=()=>{localStorage.removeItem(LS.tok);$("#f-token").value="";toast("Token cleared")};
+$("#setSave").onclick=async()=>{const tk=$("#f-token").value.trim(),rp=$("#f-repo").value.trim();
+  if(tk)localStorage.setItem(LS.tok,tk);if(rp)localStorage.setItem(LS.repo,rp);
+  localStorage.setItem(LS.mode,$("#f-mode").value);applyMode();
+  if(DB){const d=$("#f-defense").value;if(d)DB.meta.defenseDate=d;const ph=$("#f-phases").value.split(",").map(s=>s.trim()).filter(Boolean);if(ph.length)DB.meta.phases=ph;markDirty()}
+  $("#setScrim").classList.remove("on");if(tk)await ghPull()};
 
 /* week in review */
 function openWIR(){
-  const done=DB.tasks.filter(t=>st(t)==="done"&&t.completedAt&&days(t.completedAt,today())<7);
-  const byPhase={};done.forEach(t=>(byPhase[t.phase]=byPhase[t.phase]||[]).push(t));
-  const dayCount={};done.forEach(t=>dayCount[t.completedAt]=(dayCount[t.completedAt]||0)+1);
-  const busiest=Object.entries(dayCount).sort((a,b)=>b[1]-a[1])[0];
+  const done=DB.tasks.filter(t=>doneWithin(t,7));const byPhase={};done.forEach(t=>(byPhase[t.phase]=byPhase[t.phase]||[]).push(t));
+  const dayCount={};done.forEach(t=>dayCount[t.completedAt]=(dayCount[t.completedAt]||0)+1);const busiest=Object.entries(dayCount).sort((a,b)=>b[1]-a[1])[0];
   const start=new Date(today());start.setDate(start.getDate()-6);
-  const tags=["What a week.","Momentum.","The thesis is moving.","Shipping mode.","Look at all that green."];
-  let body=`<div class="wir-hero" id="wirHero">
-    <div class="big">${done.length}</div><div class="sub">tasks shipped this week</div>
-    <div class="tag">${done.length>=20?tags[2]:done.length>=8?tags[3]:tags[0]}</div></div>
-    <div class="wir-stats">
-      <div class="wir-stat"><div class="v">${Object.keys(byPhase).length}</div><div class="k">areas touched</div></div>
+  let body=`<div class="wir-hero"><div class="big">${done.length}</div><div class="sub">tasks shipped this week</div><div class="tag">${done.length>=12?"Shipping mode.":done.length>=5?"Momentum.":"Steady progress."}</div></div>
+    <div class="wir-stats"><div class="wir-stat"><div class="v">${Object.keys(byPhase).length}</div><div class="k">areas touched</div></div>
       <div class="wir-stat"><div class="v">${busiest?busiest[1]:0}</div><div class="k">busiest day (${busiest?busiest[0].slice(5):"—"})</div></div>
-      <div class="wir-stat"><div class="v">${DB.tasks.filter(t=>st(t)==="done").length}</div><div class="k">done all-time</div></div>
-    </div>`;
-  DB.meta.phases.forEach(ph=>{const items=byPhase[ph];if(!items||!items.length)return;const c=phaseColor(ph);
-    body+=`<div class="wir-ph"><h4><i style="background:${c}"></i>${ph} · ${items.length}</h4>`+
-      items.sort(doneSort).map(t=>`<div class="wir-item" data-id="${t.id}" style="--lc:${c}">${esc(t.title)}</div>`).join("")+`</div>`;
-  });
-  if(!done.length)body+=`<div class="empty">No completions logged in the last 7 days — check one off and come back!</div>`;
-  $("#wirBody").innerHTML=body;
-  $("#wirRange").textContent=start.toISOString().slice(0,10)+" → "+today();
-  $("#wirScrim").classList.add("on");
-  // confetti
-  const hero=$("#wirHero");const cols=[cssv("--accent"),cssv("--ph-novelty"),cssv("--ph-papers"),cssv("--accent2")];
-  for(let i=0;i<28;i++){const c=document.createElement("div");c.className="confetti";c.style.left=Math.random()*100+"%";c.style.background=cols[i%cols.length];c.style.animationDuration=(1.4+Math.random()*1.4)+"s";c.style.animationDelay=(Math.random()*.5)+"s";hero.appendChild(c)}
+      <div class="wir-stat"><div class="v">${DB.tasks.filter(t=>st(t)==="done").length}</div><div class="k">done all-time</div></div></div>`;
+  (DB.meta.phases||[]).forEach(ph=>{const items=byPhase[ph];if(!items)return;const c=phaseColor(ph);
+    body+=`<div class="wir-ph"><h4><i style="background:${c}"></i>${esc(ph)} · ${items.length}</h4>`+items.map(t=>`<div class="wir-item" data-id="${t.id}" style="--lc:${c}">${esc(t.title)}</div>`).join("")+`</div>`});
+  if(!done.length)body+=`<div class="empty">No completions in the last 7 days — check one off and come back.</div>`;
+  $("#wirBody").innerHTML=body;$("#wirRange").textContent=start.toISOString().slice(0,10)+" → "+today();$("#wirScrim").classList.add("on");
 }
 $("#wirBtn").onclick=openWIR;$("#wirClose").onclick=()=>$("#wirScrim").classList.remove("on");
 $("#wirScrim").addEventListener("click",e=>{if(e.target.id==="wirScrim")$("#wirScrim").classList.remove("on")});
 $("#wirBody").addEventListener("click",e=>{const it=e.target.closest("[data-id]");if(it){$("#wirScrim").classList.remove("on");openEditor(it.dataset.id)}});
 
-/* settings */
-function openSettings(){$("#f-token").value=token();$("#f-repo").value=repoCfg();$("#setScrim").classList.add("on")}
-$("#gearBtn").onclick=openSettings;$("#setCancel").onclick=()=>$("#setScrim").classList.remove("on");
-$("#setScrim").addEventListener("click",e=>{if(e.target.id==="setScrim")$("#setScrim").classList.remove("on")});
-$("#tokenClear").onclick=()=>{localStorage.removeItem(LS.tok);$("#f-token").value="";renderSync();toast("Token cleared")};
-$("#setSave").onclick=async()=>{const tk=$("#f-token").value.trim(),rp=$("#f-repo").value.trim();if(tk)localStorage.setItem(LS.tok,tk);if(rp)localStorage.setItem(LS.repo,rp);$("#setScrim").classList.remove("on");if(tk)await ghPull();else toast("Saved (offline)")};
-$("#syncBtn").onclick=async()=>{DIRTY?await ghPush():await ghPull()};
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeEditor();$("#setScrim").classList.remove("on");$("#wirScrim").classList.remove("on");$("#specScrim").classList.remove("on")}if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();if(DIRTY)ghPush()}if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();$("#undoBtn").click()}});
+/* spec viewer (PDF in the data repo, fetched with the token) */
+async function openSpec(path){
+  if(!token()){openSettings();return}const {owner,repo}=repoParts();$("#specTitle").textContent=path.split("/").pop();$("#specFrame").src="about:blank";$("#specScrim").classList.add("on");
+  try{const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`,{headers:{Authorization:"Bearer "+token(),Accept:"application/vnd.github+json"}});
+    if(!r.ok){toast("Spec fetch failed: "+r.status,1);return}const j=await r.json();const bytes=Uint8Array.from(atob(j.content.replace(/\n/g,"")),c=>c.charCodeAt(0));
+    $("#specFrame").src=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}))}catch(e){toast("Spec error",1)}
+}
+$("#specClose").onclick=()=>$("#specScrim").classList.remove("on");$("#specScrim").addEventListener("click",e=>{if(e.target.id==="specScrim")$("#specScrim").classList.remove("on")});
 
-/* ===================== boot ===================== */
-const SEED={meta:{title:"RFAM Dissertation Tracker",defenseDate:"2026-10-15",phases:["DoE & Validation","Papers","Novelty","Lab & Experiments","Dissertation","Future Work"]},tasks:[]};
-buildSwatches();applyTheme();
-(function boot(){
-  const c=localStorage.getItem(LS.cache);DB=c?JSON.parse(c):JSON.parse(JSON.stringify(SEED));
-  if(!DB.meta.phases)DB.meta.phases=SEED.meta.phases;
-  render();renderSync();$("#updatedAt").textContent=c?("local · "+(DB.meta.updated||"")):"seed";
-  if(token())ghPull();
-})();
+/* keyboard */
+window.addEventListener("keydown",e=>{
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")){if(e.key==="Escape")document.activeElement.blur();return}
+  if(document.querySelector(".scrim.on")){if(e.key==="Escape")document.querySelectorAll(".scrim.on").forEach(s=>s.classList.remove("on"));return}
+  if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();$("#undoBtn").click();return}
+  if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();if(DIRTY)ghPush();return}
+  if(e.key==="/"){e.preventDefault();$("#q").focus()} if(e.key==="n"){e.preventDefault();openEditor(null)}
+  const map={t:"today",w:"week",b:"board",k:"kanban",g:"gantt"};if(map[e.key]){VIEW=map[e.key];render()}
+});
+
+applyMode();ghPull();
 </script>
 </body>
 </html>
