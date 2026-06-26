@@ -52,7 +52,7 @@ function renderTopbar(){
       <button class="icbtn" id="btn-history" title="History"><i class="ti ti-history"></i></button>
       <button class="icbtn" id="btn-theme" title="Theme"><i class="ti ti-moon"></i></button>
       <button class="btn btn-primary" id="btn-send"><i class="ti ti-send"></i>Send to Claude</button>
-      <button class="icbtn" id="btn-help" title="Shortcuts (?)"><i class="ti ti-keyboard"></i></button>
+      <button class="icbtn" id="btn-more" title="More"><i class="ti ti-dots"></i></button>
     </div>`;
   document.getElementById('btn-home').onclick = enterHome;
   document.getElementById('chsel').onclick = openChapterMenu;
@@ -60,7 +60,7 @@ function renderTopbar(){
   document.getElementById('btn-send').onclick = openSendMenu;
   document.getElementById('btn-history').onclick = showHistory;
   document.getElementById('btn-focus').onclick = toggleFocus;
-  document.getElementById('btn-help').onclick = toggleHelp;
+  document.getElementById('btn-more').onclick = openMoreMenu;
   const si = document.getElementById('search');
   si.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(si.value); if (e.key === 'Escape'){ si.value=''; clearSearch(); } });
 }
@@ -112,11 +112,55 @@ function renderDoc(fragment){
   fixFootnotes(doc);
   runKatex(doc);
   wireFigures(doc);
+  linkCrossRefs(doc);
   buildNav();
   paintHighlights();
   restoreCursor();
   syncDown();
 }
+// ---------- clickable cross-references (Figure / Table / Section / Chapter N.M) ----------
+const chapterByNum = n => CHAPTERS.find(c => c.n === n);
+function captionTarget(doc, kind, num){
+  return [...doc.querySelectorAll('figcaption')].find(fc => new RegExp(`^\\s*(${kind}|Fig\\.?)\\s*${num.replace(/\./g,'\\.')}\\b`, 'i').test(fc.textContent))?.closest('figure');
+}
+function sectionNumberMap(doc){
+  const n = chMeta(current).n; const map = {}; let h2 = 0, h3 = 0;
+  doc.querySelectorAll('h2, h3').forEach(h => { if (h.tagName==='H2'){ h2++; h3 = 0; map[`${n}.${h2}`] = h; } else { h3++; map[`${n}.${h2}.${h3}`] = h; } });
+  return map;
+}
+function linkCrossRefs(doc){
+  const secMap = sectionNumberMap(doc), curN = chMeta(current).n;
+  const re = /\b(Figures?|Fig\.?|Tables?|Sections?|Chapters?)\s+(\d+(?:\.\d+)*)/gi;
+  const reTest = /\b(Figures?|Fig\.?|Tables?|Sections?|Chapters?)\s+\d/i;   // non-global: stateless .test()
+  const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT, {
+    acceptNode: t => { if (!t.nodeValue.trim() || !reTest.test(t.nodeValue)) return NodeFilter.FILTER_REJECT;
+      const bad = t.parentElement?.closest('a, h1, h2, h3, figcaption, .math, .katex, #footnotes, script, style');
+      return bad ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; } });
+  const todo = []; let node; while ((node = walker.nextNode())) todo.push(node);
+  todo.forEach(text => {
+    const frag = document.createDocumentFragment(); let last = 0; const s = text.nodeValue; re.lastIndex = 0; let m;
+    while ((m = re.exec(s))){
+      const kindWord = m[1], num = m[2], lead = parseInt(num, 10);
+      const isFig = /^Fig/i.test(kindWord), isTab = /^Tab/i.test(kindWord), isChap = /^Chap/i.test(kindWord);
+      let handler = null;
+      if (isFig || isTab){ const kind = isFig ? 'Figure' : 'Table';
+        if (lead === curN){ const t = captionTarget(doc, kind, num); if (t) handler = () => scrollFlash(t); }
+        else { const ch = chapterByNum(lead); if (ch) handler = () => enterChapter(ch.id); } }
+      else if (isChap){ const ch = chapterByNum(lead); if (ch && ch.id !== current) handler = () => enterChapter(ch.id); }
+      else { // Section
+        if (lead === curN){ const h = secMap[num]; if (h) handler = () => scrollFlash(h); }
+        else { const ch = chapterByNum(lead); if (ch) handler = () => enterChapter(ch.id); } }
+      if (last < m.index) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+      if (handler){ const a = document.createElement('a'); a.className = 'xref'; a.textContent = m[0]; a.href = 'javascript:void 0';
+        a.onclick = e => { e.preventDefault(); e.stopPropagation(); handler(); }; frag.appendChild(a); }
+      else frag.appendChild(document.createTextNode(m[0]));
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
+    text.parentNode.replaceChild(frag, text);
+  });
+}
+function scrollFlash(el){ el.scrollIntoView({ behavior:'smooth', block:'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
 // ---------- figure commenting ----------
 function figureLabel(fig){
   const cap = fig.querySelector('figcaption')?.textContent.trim() || '';
@@ -611,14 +655,53 @@ function cycleComment(dir){
   const c = list[i]; activeCommentId = c.id; renderComments(); jumpTo(c);
   document.querySelector(`#comments .ccard[data-id="${c.id}"]`)?.scrollIntoView({ block:'nearest' });
 }
-const SHORTCUTS = [['j / k','next / previous comment'],['↵ on a comment','jump to its place in the text'],['f','focus (distraction-free) mode'],['[ / ]','collapse left nav / comments rail'],['/','search this chapter'],['⌘\\','search the whole dissertation'],['⌘↵','Send to Claude'],['⌥1–5 (in popover)','pick a tag'],['? ','this help']];
+const SHORTCUTS = [['j / k','next / previous comment'],['↵ on a comment','jump to its place in the text'],['f','focus (distraction-free) mode'],['[ / ]','collapse left nav / comments rail'],['/','search this chapter'],['⌘\\','search the whole dissertation'],['⌘↵','open the Send to Claude menu'],['⌥1–5 (in popover)','pick a tag'],['Esc','close popover / overlay'],['?','show this help']];
+const BUTTONS = [
+  ['ti-layout-grid','Home — the chapter library'],
+  ['ti-book-2','Chapter switcher'],
+  ['ti-search','Search this chapter (⌘\\ = whole dissertation)'],
+  ['ti-arrows-diagonal-minimize-2','Focus mode — hide both side panes'],
+  ['ti-history','Version history & diffs for this chapter'],
+  ['ti-moon','Light / dark theme'],
+  ['ti-send','Send to Claude — apply edits or run review agents'],
+  ['ti-circle','Check off a section as read (left rail)'],
+  ['ti-dots','This menu — token, shortcuts, dashboard'],
+];
 function toggleHelp(){
   const ex = document.getElementById('helpov'); if (ex){ ex.remove(); return; }
   const ov = document.createElement('div'); ov.id = 'helpov';
-  ov.innerHTML = `<div class="help-card"><div class="help-h">Keyboard shortcuts</div>${SHORTCUTS.map(([k,d]) => `<div class="help-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}<div style="text-align:right;margin-top:10px"><button class="btn" id="help-x">Close</button></div></div>`;
+  ov.innerHTML = `<div class="help-card">
+    <div class="help-h">Reference</div>
+    <div class="help-sub">Toolbar</div>
+    ${BUTTONS.map(([ic,d]) => `<div class="help-row"><span class="help-ic"><i class="ti ${ic}"></i></span><span>${d}</span></div>`).join('')}
+    <div class="help-sub" style="margin-top:14px">Keyboard</div>
+    ${SHORTCUTS.map(([k,d]) => `<div class="help-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
+    <div style="text-align:right;margin-top:14px"><button class="btn" id="help-x">Close</button></div></div>`;
   document.body.appendChild(ov);
   ov.querySelector('#help-x').onclick = () => ov.remove();
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
+}
+function openMoreMenu(){
+  document.getElementById('moremenu')?.remove();
+  const menu = document.createElement('div'); menu.id = 'moremenu';
+  menu.style.cssText = 'position:absolute;top:50px;right:14px;z-index:45;background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-md);box-shadow:0 10px 30px rgba(0,0,0,.16);padding:6px;min-width:220px';
+  const hasTok = !!tok();
+  menu.innerHTML = `
+    <div class="mmi" data-act="help"><i class="ti ti-keyboard"></i>Buttons & shortcuts</div>
+    <div class="mmi" data-act="token"><i class="ti ti-key"></i>Access token${hasTok?' <span style="color:var(--success);font-size:11px;margin-left:auto">connected</span>':' <span style="color:var(--warn);font-size:11px;margin-left:auto">not set</span>'}</div>
+    <div class="mmi" data-act="dash"><i class="ti ti-layout-dashboard"></i>Back to dashboard</div>`;
+  document.body.appendChild(menu);
+  const acts = { help: toggleHelp, token: manageToken, dash: () => location.href = './index.html' };
+  menu.querySelectorAll('.mmi').forEach(el => { el.onmouseenter = () => el.style.background='var(--bg-3)'; el.onmouseleave = () => el.style.background='transparent';
+    el.onclick = () => { menu.remove(); acts[el.dataset.act](); }; });
+  setTimeout(() => document.addEventListener('click', function h(e){ if (!menu.contains(e.target) && e.target.id!=='btn-more' && !e.target.closest?.('#btn-more')){ menu.remove(); document.removeEventListener('click', h); } }), 0);
+}
+function manageToken(){
+  const cur = tok();
+  const v = prompt(cur ? 'Access token is set. Paste a new one to replace it, or leave blank and OK to remove it:' : 'Paste a fine-grained PAT (Contents: read/write on the data repo):', '');
+  if (v === null) return;
+  if (v.trim() === ''){ if (cur && confirm('Remove the saved access token from this browser?')){ localStorage.removeItem('ghpat'); flash('Token removed.'); } return; }
+  localStorage.setItem('ghpat', v.trim()); flash('Token saved.'); if (document.getElementById('doc') || current) loadChapter(current);
 }
 window.addEventListener('keydown', e => {
   const pop = document.getElementById('pop');
