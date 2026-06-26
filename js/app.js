@@ -286,6 +286,7 @@ function enterHome(){
   document.getElementById('topbar').innerHTML =
     `<strong style="font-size:16px;font-weight:600">Dissertation Reviewer</strong>
      <span style="margin-left:auto;font-size:12.5px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px"><i class="ti ti-flag"></i>defense in ${daysToDefense()} days</span>
+     <a class="icbtn" href="./index.html" title="Back to dashboard"><i class="ti ti-layout-dashboard"></i></a>
      <button class="icbtn" id="btn-theme"><i class="ti ti-moon"></i></button>`;
   document.getElementById('btn-theme').onclick = toggleTheme;
   read.innerHTML = homeHtml();
