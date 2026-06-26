@@ -105,36 +105,73 @@ function renderConnect(){
 
 function renderDoc(fragment){
   read.innerHTML = `<article id="doc">${fragment}</article>`;
-  runKatex(document.getElementById('doc'));
+  const doc = document.getElementById('doc');
+  fixFootnotes(doc);
+  runKatex(doc);
   buildNav();
   restoreCursor();
   syncDown();
 }
 function runKatex(el){
   if (!window.katex){ setTimeout(() => runKatex(el), 100); return; }
-  el.querySelectorAll('span.math').forEach(s => { try { window.katex.render(s.textContent, s, { displayMode:s.classList.contains('display'), throwOnError:false }); } catch(e){} });
+  el.querySelectorAll('span.math').forEach(s => {
+    const tex = s.textContent.replace(/\\label\{[^}]*\}/g, '');   // KaTeX renders \label as a red error; numbering is automatic
+    try { window.katex.render(tex, s, { displayMode:s.classList.contains('display'), throwOnError:false }); } catch(e){}
+  });
+}
+// pandoc dumps every footnote in one section at the very end. Rather than reorder the nested
+// section-divs (fragile), surface each note inline: clicking the superscript pops the note text
+// right where it's referenced. The endnote list stays at the bottom under a "Notes" heading.
+function fixFootnotes(doc){
+  const fn = doc.querySelector('#footnotes');
+  if (fn && !fn.querySelector('h2.fn-h')){ const h = document.createElement('h2'); h.className = 'fn-h'; h.textContent = 'Notes'; fn.insertBefore(h, fn.firstChild); }
+  doc.querySelectorAll('a.footnote-ref').forEach(a => {
+    a.onclick = e => { e.preventDefault(); e.stopPropagation();
+      document.getElementById('fn-tip')?.remove();
+      const li = doc.querySelector(a.getAttribute('href')); if (!li) return;
+      const html = li.cloneNode(true); html.querySelectorAll('a.footnote-back').forEach(b => b.remove());
+      const tip = document.createElement('div'); tip.id = 'fn-tip'; tip.className = 'fn-tip';
+      tip.innerHTML = `<div class="fn-tip-h">Note ${a.textContent.replace(/[^0-9]/g,'')}</div>`;
+      tip.append(...html.childNodes);   // already KaTeX-rendered by the doc pass — don't re-render (would double the math)
+      read.appendChild(tip);
+      const rr = read.getBoundingClientRect(), ar = a.getBoundingClientRect();
+      tip.style.top = (ar.bottom - rr.top + read.scrollTop + 6) + 'px';
+      tip.style.left = Math.min(ar.left - rr.left, read.clientWidth - 360) + 'px';
+      const close = ev => { if (!tip.contains(ev.target)){ tip.remove(); document.removeEventListener('mousedown', close); } };
+      setTimeout(() => document.addEventListener('mousedown', close), 0);
+    };
+  });
+  doc.querySelectorAll('a.footnote-back').forEach(a => {
+    a.onclick = e => { e.preventDefault(); const t = doc.querySelector(a.getAttribute('href')); if (t){ t.scrollIntoView({ behavior:'smooth', block:'center' }); t.classList.add('flash'); setTimeout(() => t.classList.remove('flash'), 1500); } };
+  });
 }
 
 // ---------- left section navigator ----------
 function buildNav(){
   const nav = document.getElementById('nav');
   const hs = [...document.querySelectorAll('#doc h2, #doc h3')];
-  nav.innerHTML = `<div class="lbl">SECTIONS</div>`;
+  review.read = review.read || {};
+  review.secCount = hs.length;
+  const doneN = hs.filter((h,i) => review.read[h.id || ('sec-'+i)]).length;
+  nav.innerHTML = `<div class="lbl">SECTIONS<span style="margin-left:auto">${doneN}/${hs.length}</span></div>`;
   hs.forEach((h, i) => {
     if (!h.id) h.id = 'sec-' + i;
     const sub = h.tagName === 'H3';
     const cnt = review.comments.filter(c => (c.anchor.section||'') === h.textContent.trim()).length;
-    const a = document.createElement('a'); a.className = sub ? 'sub' : '';
-    a.dataset.sec = h.id;
-    a.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.textContent}</span>${cnt?`<span class="count">${cnt}</span>`:''}`;
-    a.onclick = () => h.scrollIntoView({ behavior:'smooth', block:'start' });
+    const done = !!review.read[h.id];
+    const a = document.createElement('a'); a.className = sub ? 'sub' : ''; a.dataset.sec = h.id;
+    a.innerHTML = `<button class="chk${done?' on':''}" title="Mark section read"><i class="ti ti-${done?'circle-check-filled':'circle'}"></i></button>
+      <span class="nav-t" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap${done?';color:var(--text-3)':''}">${h.textContent}</span>${cnt?`<span class="count">${cnt}</span>`:''}`;
+    a.querySelector('.nav-t').onclick = () => h.scrollIntoView({ behavior:'smooth', block:'start' });
+    a.querySelector('.chk').onclick = e => { e.stopPropagation();
+      if (review.read[h.id]) delete review.read[h.id]; else review.read[h.id] = true;
+      save(); syncUpSoon(); buildNav(); };
     nav.appendChild(a);
   });
   read.onscroll = () => { let cur = null; hs.forEach(h => { if (h.getBoundingClientRect().top < 140) cur = h.id; });
     nav.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.sec === cur));
-    const frac = read.scrollTop / Math.max(1, read.scrollHeight - read.clientHeight);
-    review.cursor = { sec: cur, readFrac: Math.min(1, Math.max(review.cursor?.readFrac || 0, frac)) };
-    clearTimeout(scrollSaveT); scrollSaveT = setTimeout(() => { save(); syncUpSoon(); }, 900); };
+    review.cursor = { sec: cur };   // scroll only tracks position for resume — it never marks sections read
+    clearTimeout(scrollSaveT); scrollSaveT = setTimeout(() => save(), 900); };
   read.onscroll();
 }
 
@@ -278,9 +315,12 @@ const DEFENSE = '2026-10-15';
 const daysToDefense = () => Math.max(0, Math.ceil((new Date(DEFENSE) - new Date()) / 86400000));
 function chapterStats(ch){
   const r = JSON.parse(localStorage.getItem('review:'+ch) || 'null');
+  const checked = r?.read ? Object.keys(r.read).length : 0;
+  const sec = r?.secCount || 0;
   return { open: r ? r.comments.filter(c=>c.status==='open').length : 0,
            merged: r ? r.comments.filter(c=>c.status==='merged').length : 0,
-           total: r ? r.comments.length : 0, frac: r?.cursor?.readFrac || 0 };
+           total: r ? r.comments.length : 0,
+           checked, sec, frac: sec ? checked/sec : 0, readDone: sec>0 && checked>=sec };
 }
 function enterHome(){
   document.getElementById('nav').style.display = 'none';
@@ -308,9 +348,9 @@ function homeHtml(){
       <button class="btn" data-ch="${last}" style="margin-left:auto;flex-shrink:0">Resume</button></div>` : '';
   const cards = CHAPTERS.map(c => {
     const s = chapterStats(c.id); const pct = Math.round(s.frac*100);
-    const done = s.total>0 && s.open===0 && s.merged>0;
+    const done = s.readDone;
     const bar = done ? 'var(--success)' : 'var(--accent)';
-    const status = done ? `<span style="color:var(--success)">complete</span>` : s.frac>0 ? `${pct}% read` : `not started`;
+    const status = done ? `<span style="color:var(--success)">complete</span>` : s.checked>0 ? `${s.checked}/${s.sec} sections` : `not started`;
     const right = s.open ? `<span style="color:var(--accent)">${s.open} open</span>` : s.merged ? `${s.merged} merged` : `<span style="color:var(--text-3)">—</span>`;
     return `<div class="chcard" data-ch="${c.id}" style="border:.5px solid var(--border);border-radius:var(--r-lg);padding:14px 15px;cursor:pointer">
         <div style="font-size:11.5px;color:var(--text-3)">Chapter ${c.n}</div>

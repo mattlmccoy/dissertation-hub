@@ -5,7 +5,9 @@ export const mergeReview = (local, remote) => {
     return rc ? { ...lc, status:rc.status, claude:rc.claude } : lc; });
   // include remote-only comments (e.g. created on another machine)
   for (const rc of remote.comments||[]) if (!comments.find(c=>c.id===rc.id)) comments.push(rc);
-  return { ...remote, ...local, comments };
+  // read-state is app-owned; union so a section checked on any device stays checked
+  const read = { ...(remote.read||{}), ...(local.read||{}) };
+  return { ...remote, ...local, comments, read, secCount: local.secCount || remote.secCount };
 };
 const API='https://api.github.com', OWNER='mattlmccoy', REPO='dissertation-tracker-data';
 const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.github+json' });

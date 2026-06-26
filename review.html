@@ -42,8 +42,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 .search input{flex:1;border:none;background:none;outline:none;font:inherit;color:var(--text)}
 .panes{flex:1;display:flex;min-height:0}
 .nav{flex:0 0 210px;border-right:.5px solid var(--border);overflow:auto;padding:18px 10px}
-.nav .lbl{font-size:11px;letter-spacing:.08em;color:var(--text-3);padding:0 8px 10px}
-.nav a{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--r-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;line-height:1.35;margin-bottom:1px}
+.nav .lbl{display:flex;font-size:11px;letter-spacing:.08em;color:var(--text-3);padding:0 8px 10px}
+.nav a{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:var(--r-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;line-height:1.35;margin-bottom:1px}
+.nav a .chk{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;font-size:15px;color:var(--text-3);border-radius:50%}
+.nav a .chk:hover{color:var(--accent)} .nav a .chk.on{color:var(--success)}
+.nav a .nav-t{flex:1;min-width:0}
 .nav a:hover{background:var(--bg-2);color:var(--text)}
 .nav a.sub{padding-left:24px;font-size:13px;color:var(--text-3)}
 .nav a.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
@@ -57,6 +60,20 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 #doc p{margin:0 0 16px} #doc strong{font-weight:600}
 #doc img{max-width:100%;height:auto;display:block;margin:18px auto;border:.5px solid var(--border);border-radius:var(--r-sm)}
 #doc figure{margin:24px 0} #doc figcaption{font-size:13.5px;color:var(--text-2);margin-top:8px;text-align:center;line-height:1.5}
+#doc table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14.5px;line-height:1.5}
+#doc table caption{caption-side:top;font-size:13.5px;color:var(--text-2);text-align:left;margin-bottom:8px;line-height:1.5}
+#doc th,#doc td{border:.5px solid var(--border);padding:7px 11px;text-align:left;vertical-align:top}
+#doc thead th{background:var(--bg-2);font-weight:600;border-bottom:1px solid var(--border-2)}
+#doc tbody tr:nth-child(even){background:var(--bg-2)}
+#doc #footnotes{font-size:13.5px;color:var(--text-2);border-top:.5px solid var(--border);margin-top:36px;padding-top:8px}
+#doc #footnotes h2.fn-h{font-size:15px;margin:8px 0 6px;color:var(--text)}
+#doc #footnotes ol{padding-left:20px;margin:0} #doc #footnotes li{margin:6px 0}
+#doc .footnote-ref{font-size:.75em;vertical-align:super;line-height:0;color:var(--accent);text-decoration:none;padding:0 1px;cursor:pointer}
+#doc .footnote-ref:hover{text-decoration:underline}
+#doc a.footnote-back{text-decoration:none;color:var(--accent);margin-left:4px}
+.fn-tip{position:absolute;z-index:25;width:min(360px,80%);background:var(--bg);border:.5px solid var(--accent);border-radius:var(--r-md);padding:11px 13px;box-shadow:0 8px 28px rgba(0,0,0,.16);font-size:13.5px;line-height:1.5;color:var(--text-2)}
+.fn-tip-h{font-size:11px;letter-spacing:.04em;color:var(--text-3);text-transform:uppercase;margin-bottom:5px}
+.fn-tip p{margin:0}
 #doc .references,#doc #refs{font-size:13.5px;color:var(--text-2);border-top:.5px solid var(--border);margin-top:36px;padding-top:16px}
 #doc ::selection{background:rgba(60,120,230,.22)}
 .flash{background:var(--warn-bg);border-radius:3px;transition:background .3s}
