@@ -96,7 +96,14 @@ async function loadChapter(ch){
       { headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' } });
     if (!r.ok) throw new Error('HTTP '+r.status);
     renderDoc(await r.text());
-  } catch(e){ read.innerHTML = `<div class="empty">Couldn't pull chapter ${chMeta(ch).n} from your private repo (${e.message}). Check the access token in <b>⋯ → Settings</b>.</div>`; }
+  } catch(e){
+    if (/\b401\b/.test(e.message)){ read.innerHTML = `<div class="empty"><i class="ti ti-key-off" style="font-size:24px;color:var(--text-3)"></i>
+      <div style="font-size:16px;font-weight:500;margin:10px 0 6px">Your access token expired</div>
+      <div style="font-size:13px;line-height:1.6;margin-bottom:14px">Fine-grained tokens are time-limited. Generate a new one (Contents: read on the data repo) and re-enter it.</div>
+      <button class="btn btn-primary" id="connect">Enter a new token</button></div>`;
+      document.getElementById('connect').onclick = () => { const v = prompt('New fine-grained PAT:'); if (v){ localStorage.setItem('ghpat', v.trim()); loadChapter(current); } };
+      return; }
+    read.innerHTML = `<div class="empty">Couldn't pull chapter ${chMeta(ch).n} from your private repo (${e.message}). Check the access token in <b>⋯ → Settings</b>.</div>`; }
 }
 function renderConnect(){
   read.innerHTML = `<div class="empty"><i class="ti ti-lock" style="font-size:24px;color:var(--text-3)"></i>

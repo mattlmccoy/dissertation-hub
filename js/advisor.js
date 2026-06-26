@@ -39,6 +39,18 @@ const escapeHtml = s => (s||'').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;',
 const read = document.getElementById('read');
 let current = null, review = null, released = [];
 const tok = () => localStorage.getItem('ghpat');
+let keyBad = false;
+const is401 = e => /\b401\b/.test((e && e.message) || '');
+function showKeyExpired(){
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('comments').style.display = 'none';
+  document.getElementById('topbar').innerHTML = `<strong style="font-size:16px;font-weight:600">Dissertation review · ${escapeHtml(ADVISOR.name)}</strong>`;
+  read.innerHTML = `<div class="empty"><i class="ti ti-key-off" style="font-size:26px;color:var(--text-3)"></i>
+    <div style="font-size:17px;font-weight:500;margin:10px 0 6px">Your access key has expired</div>
+    <div style="font-size:13px;line-height:1.6;margin-bottom:16px;max-width:430px">Access keys are time-limited for security. Please request a fresh key, then enter it below to pick up where you left off — your comments are saved.</div>
+    <button class="btn btn-primary" id="newkey">Enter a new key</button></div>`;
+  read.querySelector('#newkey').onclick = () => { const v = prompt('New access key:'); if (v && v.trim()){ localStorage.setItem('ghpat', v.trim()); keyBad = false; boot(); } };
+}
 const reviewPath = ch => `advisor/${ADVISOR.id}/${ch}.json`;
 const localKey = ch => `adv:${ADVISOR.id}:${ch}`;
 const loadLocal = ch => JSON.parse(localStorage.getItem(localKey(ch)) || 'null') || newReview(ch, '');
@@ -66,6 +78,7 @@ async function loadRelease(){
   if (location.hostname==='localhost'||location.hostname==='127.0.0.1'){ try { const r=await fetch('./release.json'); if(r.ok){ apply(await r.json()); return; } } catch(e){} }
   if (!t){ released = []; return; }
   try { const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/release.json?t=${Date.now()}`,{ headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' }, cache:'no-store' });
+    if (r.status === 401){ keyBad = true; return; }
     if (r.ok) apply(await r.json()); } catch(e){ released = []; }
   function apply(j){ released = (j?.[ADVISOR.id]?.released) || []; }
 }
@@ -79,7 +92,8 @@ async function loadChapter(ch){
   const t = tok(); if (!t){ renderConnect(); return; }
   try { const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/content/${ch}.html?t=${Date.now()}`,{ headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' }, cache:'no-store' });
     if (!r.ok) throw new Error('HTTP '+r.status); renderDoc(await r.text()); }
-  catch(e){ read.innerHTML = `<div class="empty">Couldn't load Chapter ${chMeta(ch).n} (${e.message}). Check your access link.</div>`; }
+  catch(e){ if (is401(e)) return showKeyExpired();
+    read.innerHTML = `<div class="empty">Couldn't load Chapter ${chMeta(ch).n} (${e.message}). Check your access link.</div>`; }
 }
 function renderConnect(){
   read.innerHTML = `<div class="empty"><i class="ti ti-lock" style="font-size:24px;color:var(--text-3)"></i>
@@ -93,9 +107,39 @@ function renderConnect(){
 function renderDoc(fragment){
   read.innerHTML = `<article id="doc">${fragment}</article>`;
   const doc = document.getElementById('doc');
-  fixFootnotes(doc); runKatex(doc); wireFigures(doc); linkCrossRefs(doc); buildNav(); paintHighlights();
+  fixFootnotes(doc); runKatex(doc); wireFigures(doc); linkCrossRefs(doc); buildNav(); markWhatsNew(doc); paintHighlights();
   if (review.cursor?.sec) document.getElementById(review.cursor.sec)?.scrollIntoView();
   syncDown();
+}
+// "what changed since you last looked": per-section content fingerprint, compared to the last visit
+function _hash(s){ let h = 0; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0; return h; }
+function sectionSig(doc){
+  return [...doc.querySelectorAll('h2, h3')].map(h => {
+    let txt = h.textContent; let el = h.nextElementSibling;
+    while (el && !/^H[1-3]$/.test(el.tagName)){ txt += ' ' + el.textContent; el = el.nextElementSibling; }
+    return { t:h.textContent.trim(), h:_hash(txt.replace(/\s+/g,' ').trim()) };
+  });
+}
+function markWhatsNew(doc){
+  const key = 'seen:'+ADVISOR.id+':'+current, cur = sectionSig(doc);
+  let prev = null; try { prev = JSON.parse(localStorage.getItem(key) || 'null'); } catch(e){}
+  if (prev && prev.length === cur.length && prev.every((p,i) => p.t === cur[i].t)){
+    const changed = cur.map((c,i) => prev[i].h !== c.h ? i : -1).filter(i => i >= 0);
+    if (changed.length){
+      const links = [...document.querySelectorAll('#nav a')];
+      changed.forEach(i => links[i]?.classList.add('changed'));
+      showNewBanner(changed, doc);
+    }
+  }
+  localStorage.setItem(key, JSON.stringify(cur));
+}
+function showNewBanner(changed, doc){
+  document.getElementById('whatsnew')?.remove();
+  const heads = [...doc.querySelectorAll('h2, h3')];
+  const bar = document.createElement('div'); bar.id = 'whatsnew'; bar.className = 'whatsnew';
+  bar.innerHTML = `<i class="ti ti-sparkles"></i><span><b>${changed.length}</b> section${changed.length>1?'s':''} updated since your last visit</span><button class="wn-go">Jump to first change</button>`;
+  read.prepend(bar);
+  bar.querySelector('.wn-go').onclick = () => { const h = heads[changed[0]]; if (h){ h.scrollIntoView({behavior:'smooth',block:'start'}); h.classList.add('flash'); setTimeout(() => h.classList.remove('flash'), 1500); } };
 }
 const SIUNITX = { henry:'H',farad:'F',ohm:'\\Omega',siemens:'S',volt:'V',watt:'W',ampere:'A',kelvin:'K',hertz:'Hz',joule:'J',newton:'N',pascal:'Pa',metre:'m',meter:'m',gram:'g',mole:'mol',tesla:'T',weber:'Wb',coulomb:'C',radian:'rad',decibel:'dB',inch:'in',poise:'P',percent:'\\%',degree:'^\\circ',nano:'n',micro:'\\mu',milli:'m',pico:'p',femto:'f',kilo:'k',mega:'M',giga:'G',centi:'c',deci:'d' };
 function expandUnits(tex){ return tex.replace(/\\degreeCelsius\b/g,'{}^\\circ\\mathrm{C}').replace(/\\([a-zA-Z]+)\b/g,(m,name)=>{ if(!(name in SIUNITX)) return m; const v=SIUNITX[name]; return /^[A-Za-z]+$/.test(v)?`\\mathrm{${v}}`:v; }); }
@@ -303,7 +347,7 @@ function clearSearch(){ document.querySelectorAll('#doc mark:not(.cmark)').forEa
 function flash(msg){ const t=document.createElement('div'); t.textContent=msg; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.2)'; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 
 // ---------- boot ----------
-async function boot(){ await loadRelease(); enterHome(); }
+async function boot(){ keyBad = false; await loadRelease(); if (keyBad && tok()){ showKeyExpired(); return; } enterHome(); }
 window.addEventListener('keydown',e=>{ const pop=document.getElementById('pop'); if(pop){ if(e.key==='Escape') pop.querySelector('#ccancel').click(); return; }
   if(/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')) return; if(e.key==='/'){ e.preventDefault(); document.getElementById('search')?.focus(); } });
 boot();
