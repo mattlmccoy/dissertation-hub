@@ -1047,7 +1047,7 @@ function renderInbox(panel, { jobs, chData, adv }){
   const chips = [
     chip('git-pull-request', stagedTotal, 'staged to approve', 'var(--info)', firstStaged?.ch),
     chip('user-exclamation', advTotal, 'new advisor comment'+(advTotal!==1?'s':''), 'var(--accent)', firstAdv?.ch),
-    chip('clock-play', queued+running, 'Claude job'+(queued+running!==1?'s':'')+' running', 'var(--warn)'),
+    chip('clock-play', queued+running, 'Claude job'+(queued+running!==1?'s':'')+(running?' running':' queued'), 'var(--warn)'),
   ].filter(Boolean).join('');
   const cell = (n, cls, ch) => n
     ? `<button class="mx ${cls}" data-ch="${ch}">${n}</button>` : `<span class="mx mx0">·</span>`;
