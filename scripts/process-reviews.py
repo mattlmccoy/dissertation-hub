@@ -120,9 +120,23 @@ def cmd_list(a):
             tag = c.get("tag", "?")
             sec = c.get("anchor", {}).get("section", "")
             quote = (c.get("anchor", {}).get("quote", "") or "").replace("\n", " ")[:90]
+            edit = c.get("edit")
             print(f"   {C['c']}{c['id']}{C['x']} {C['y']}[{tag}]{C['x']} {C['dim']}{sec}{C['x']}")
             print(f"      quote: “{quote}”")
-            print(f"      ask:   {c.get('body','').strip()}")
+            if edit:
+                op = edit.get("op")
+                print(f"      {C['r']}VERBATIM {op.upper()} — apply this EXACT change; do NOT paraphrase or reinterpret.{C['x']}")
+                print(f"        find:        “{(edit.get('find','') or '').replace(chr(10),' ')[:160]}”")
+                if op == "delete":
+                    print(f"        action:      delete the find text (and tidy surrounding punctuation/spacing)")
+                elif op == "insert":
+                    print(f"        insert AFTER find, verbatim: “{(edit.get('replacement','') or '')[:200]}”")
+                else:
+                    print(f"        replace with verbatim:       “{(edit.get('replacement','') or '')[:200]}”")
+                if c.get("body", "").strip():
+                    print(f"        note:        {c['body'].strip()}")
+            else:
+                print(f"      ask:   {c.get('body','').strip()}")
         print()
     print(f"{C['dim']}apply-edits → start <job> → edit → stage <job>   |   "
           f"question → respond <chapter> <comment_id> \"answer\"   |   run-agents → done <job>{C['x']}")

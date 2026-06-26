@@ -300,27 +300,49 @@ function showPopover(anchor, rects, defaultTag='claim'){
   const isFig = anchor.kind === 'figure';
   const pop = document.createElement('div'); pop.id = 'pop'; pop.className = 'popover';
   pop.style.top = top + 'px'; pop.style.left = '50%'; pop.style.transform = 'translateX(-50%)';
+  const modes = isFig ? '' : `<div class="pmodes" id="pmodes">
+      <button data-m="note" class="on">Comment</button><button data-m="replace">Replace</button><button data-m="insert">Insert after</button><button data-m="delete">Delete</button></div>`;
   pop.innerHTML = `
     <div class="head"><i class="ti ti-${isFig?'photo':'link'}" style="margin-right:5px"></i>Commenting on ${isFig?'figure':''}
       <span class="loc"><i class="ti ti-circle-check-filled"></i>${anchor.section ? '§ '+anchor.section.slice(0,38) : (isFig?'this figure':'this passage')}</span></div>
-    <div class="snip">"${escapeHtml(anchor.quote.slice(0,150))}"</div>
+    <div class="snip" id="psnip">"${escapeHtml(anchor.quote.slice(0,150))}"</div>
+    ${modes}
+    <textarea id="crepl" class="crepl" style="display:none"></textarea>
     <div class="tags" id="tags"></div>
     <textarea id="cbody" placeholder="Leave a comment…  (1–5 to tag · ⌘↵ to save)"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
   read.appendChild(pop);
-  let tag = defaultTag; const tr = pop.querySelector('#tags');
+  let tag = defaultTag, mode = 'note'; const tr = pop.querySelector('#tags');
   TAGS.forEach(t => { const b = document.createElement('button'); b.textContent = t; b.dataset.tag = t;
     const pick = () => { tag = t;
       [...tr.children].forEach(x => { x.className = ''; x.style.background = 'transparent'; x.style.color = 'var(--text-2)'; x.style.borderColor = 'var(--border)'; });
       b.className = 'on'; b.style.background = `var(--${t}-bg)`; b.style.color = `var(--${t})`; b.style.borderColor = 'transparent'; };
     b.onclick = pick; tr.appendChild(b); if (t === defaultTag) pick(); });
-  pop.querySelector('#cbody').focus();
+  const repl = pop.querySelector('#crepl'), body = pop.querySelector('#cbody'), saveBtn = pop.querySelector('#csave');
+  const setMode = m => { mode = m; pop.querySelectorAll('#pmodes button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+    const needsRepl = m === 'replace' || m === 'insert';
+    repl.style.display = needsRepl ? 'block' : 'none';
+    repl.placeholder = m === 'replace' ? 'Exact replacement text (verbatim)…' : 'Exact text to insert after the selection (verbatim)…';
+    body.placeholder = m === 'note' ? 'Leave a comment…  (1–5 to tag · ⌘↵ to save)' : 'Optional note for this edit…';
+    saveBtn.textContent = m === 'note' ? 'Comment' : m === 'delete' ? 'Suggest deletion' : m === 'insert' ? 'Suggest insertion' : 'Suggest replacement';
+    saveBtn.className = 'btn ' + (m === 'delete' ? 'btn-danger' : m === 'note' ? 'btn-primary' : 'btn-suggest');
+    pop.querySelector('#psnip').style.textDecoration = m === 'delete' ? 'line-through' : 'none';
+    if (needsRepl) repl.focus(); else body.focus(); };
+  pop.querySelectorAll('#pmodes button').forEach(b => b.onclick = () => setMode(b.dataset.m));
+  body.focus();
   const close = () => { pop.remove(); window.getSelection().removeAllRanges(); };
-  const commit = () => { review = addComment(review, { anchor:pending, kind:pending.kind, tag, body:pop.querySelector('#cbody').value });
+  const commit = () => {
+    let edit = null;
+    if (mode === 'replace') edit = { op:'replace', find:anchor.quote, replacement:repl.value };
+    else if (mode === 'insert') edit = { op:'insert', find:anchor.quote, position:'after', replacement:repl.value };
+    else if (mode === 'delete') edit = { op:'delete', find:anchor.quote, replacement:'' };
+    if (edit && mode !== 'delete' && !repl.value.trim()){ flash('Enter the '+(mode==='insert'?'text to insert':'replacement text')+'.'); return; }
+    review = addComment(review, { anchor:pending, kind:edit?'suggestion':pending.kind, tag:edit?'edit':tag, body:body.value, edit });
     save(); syncUpSoon(); renderComments(); buildNav(); paintHighlights(); pop.remove(); window.getSelection().removeAllRanges(); };
   pop.querySelector('#ccancel').onclick = close;
-  pop.querySelector('#csave').onclick = commit;
+  saveBtn.onclick = commit;
   pop._commit = commit; pop._pickTag = i => { const b = tr.children[i]; if (b) b.click(); };
+  pop._setMode = setMode;
 }
 
 // ---------- comments rail ----------
@@ -350,7 +372,7 @@ function renderComments(){
   const bar = document.createElement('div'); bar.className = 'cbar';
   const present = new Set(review.comments.map(c => c.status));
   bar.innerHTML = `<select class="csel" id="fstatus">${STATUS_ORDER.filter(s => s==='all'||present.has(s)).map(s => `<option value="${s}"${cFilter.status===s?' selected':''}>${s==='all'?'all status':s}</option>`).join('')}</select>
-    <select class="csel" id="ftag"><option value="all"${cFilter.tag==='all'?' selected':''}>all tags</option>${TAGS.map(t => `<option value="${t}"${cFilter.tag===t?' selected':''}>${t}</option>`).join('')}</select>
+    <select class="csel" id="ftag"><option value="all"${cFilter.tag==='all'?' selected':''}>all tags</option>${[...TAGS,'edit'].map(t => `<option value="${t}"${cFilter.tag===t?' selected':''}>${t}</option>`).join('')}</select>
     <button class="csort" id="fsort" title="Sort">${cFilter.sort==='doc'?'↓ document':'↓ newest'}</button>`;
   pane.appendChild(bar);
   bar.querySelector('#fstatus').onchange = e => { cFilter.status = e.target.value; renderComments(); };
@@ -365,7 +387,7 @@ function renderComments(){
     const stColor = st==='staged'?'var(--info)':st==='merged'?'var(--success)':st==='queued'?'var(--warn)':st==='answered'?'var(--success)':st==='resolved'?'var(--text-3)':'var(--text-2)';
     const stBg = st==='staged'?'var(--info-bg)':st==='merged'?'var(--success-bg)':st==='queued'?'var(--warn-bg)':st==='answered'?'var(--success-bg)':'transparent';
     card.innerHTML = `<div class="row">
-        <span class="chip" style="background:var(--${c.tag}-bg);color:var(--${c.tag})">${c.kind==='figure'?'<i class="ti ti-photo" style="font-size:11px;vertical-align:-1px;margin-right:2px"></i>':''}${c.tag}</span>
+        <span class="chip" style="background:var(--${c.tag}-bg);color:var(--${c.tag})">${c.kind==='figure'?'<i class="ti ti-photo" style="font-size:11px;vertical-align:-1px;margin-right:2px"></i>':c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:11px;vertical-align:-1px;margin-right:2px"></i>':''}${c.tag}</span>
         <span class="cactions" style="margin-left:auto;display:none;gap:1px">
           <button class="icbtn cact" data-act="resolve" title="${st==='resolved'?'Reopen':'Resolve'}" style="width:25px;height:25px;font-size:14px"><i class="ti ti-${st==='resolved'?'rotate-clockwise':'check'}"></i></button>
           <button class="icbtn cact" data-act="edit" title="Edit" style="width:25px;height:25px;font-size:14px"><i class="ti ti-pencil"></i></button>
@@ -373,6 +395,7 @@ function renderComments(){
         <span class="status" style="background:${stBg};color:${stColor};${st==='open'?'display:none':''}">${st}</span></div>
       <div class="snip">"${escapeHtml((c.anchor.quote||'').slice(0,52))}"</div>
       <div class="body" style="${st==='resolved'?'opacity:.5;text-decoration:line-through':''}">${escapeHtml(c.body)}</div>
+      ${suggHtml(c)}
       ${c.claude?.response ? `<div class="cresp"><div class="cresp-h"><i class="ti ti-robot-face"></i>Claude</div>${escapeHtml(c.claude.response)}</div>` : ''}
       ${c.claude?.branch ? `<div class="branch"><i class="ti ti-git-branch"></i>${escapeHtml(c.claude.branch)}</div>` : ''}`;
     if (c.id === activeCommentId) card.classList.add('active');
@@ -444,6 +467,7 @@ function wrapInNode(el, needle, c){
       const r = document.createRange();
       r.setStart(node, idx); r.setEnd(node, Math.min(node.nodeValue.length, idx + needle.length));
       const mk = document.createElement('mark'); mk.className = 'cmark'; mk.dataset.id = c.id; mk.dataset.tag = c.tag;
+      if (c.edit) mk.dataset.sugg = c.edit.op;
       try { r.surroundContents(mk); mk.onclick = e => { e.stopPropagation(); activateComment(c.id); }; return true; } catch(e){ return false; }
     }
   }
@@ -456,6 +480,15 @@ function markFigure(doc, c){
   if (fig){ fig.classList.add('cmark-fig'); fig.dataset.cid = c.id; fig.style.setProperty('--mk', `var(--${c.tag})`); }
 }
 const escapeHtml = s => (s||'').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+function suggHtml(c){
+  if (!c.edit) return '';
+  const e = c.edit, find = escapeHtml((e.find||'').slice(0,140)), repl = escapeHtml((e.replacement||'').slice(0,240));
+  const label = e.op==='replace'?'Replace':e.op==='insert'?'Insert after':'Delete';
+  const inner = e.op==='delete' ? `<del>${find}</del>`
+    : e.op==='insert' ? `<span style="color:var(--text-3)">…${find}</span> <ins>${repl}</ins>`
+    : `<del>${find}</del> <ins>${repl}</ins>`;
+  return `<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${label} · verbatim</div>${inner}</div>`;
+}
 
 // ---------- search ----------
 function runSearch(q){ clearSearch(); if (!q.trim()) return; const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');

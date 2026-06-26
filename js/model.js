@@ -6,6 +6,7 @@ export const addComment = (r, c) => ({ ...r, comments:[...r.comments, {
   id: nid(), page:c.page, kind:c.kind||'text',
   anchor:{ quote:c.anchor?.quote||'', synctex:c.anchor?.synctex||null, rects:c.anchor?.rects||[], section:c.anchor?.section||'', figure:c.anchor?.figure||null, confirmed:!!c.anchor?.confirmed },
   tag:c.tag||'other', body:c.body||'', status:'open',
+  edit:c.edit||null,   // verbatim suggestion: { op:'replace'|'insert'|'delete', find, replacement, position? }
   claude:{ branch:null, commit:null, response:null, resolved_line:null, ts:null },
   created_ts:new Date().toISOString() }] });
 export const updateComment = (r, id, patch) =>
