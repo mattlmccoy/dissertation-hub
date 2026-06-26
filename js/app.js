@@ -365,9 +365,10 @@ function showPopover(anchor, rects, defaultTag='claim'){
 }
 
 // ---------- comments rail ----------
-let editingId = null, activeCommentId = null;
+let editingId = null, activeCommentId = null, resolvedOpen = false;
 let cFilter = { status:'all', tag:'all', sort:'doc' };
-const STATUS_ORDER = ['all','open','queued','staged','answered','merged','resolved'];
+const STATUS_ORDER = ['all','open','queued','staged','approved','answered','merged','declined','resolved'];
+const RESOLVED_STATES = new Set(['merged','answered','declined','resolved']);   // terminal — fold into "Resolved (N)"
 function docOrderIndex(){           // map comment id -> vertical position of its anchor in the doc
   const map = {}; const order = [...document.querySelectorAll('#doc p, #doc li, #doc figure, #doc figcaption, #doc h2, #doc h3')];
   review.comments.forEach(c => { const q = (c.anchor.quote||'').replace(/\s+/g,' ').trim().slice(0,30);
@@ -399,9 +400,25 @@ function renderComments(){
   bar.querySelector('#fsort').onclick = () => { cFilter.sort = cFilter.sort==='doc'?'new':'doc'; renderComments(); };
   const list = filteredComments();
   if (!list.length){ pane.appendChild(Object.assign(document.createElement('div'), { className:'cempty', textContent:'No comments match this filter.' })); return; }
-  list.forEach(c => {
+  const fold = cFilter.status === 'all';                       // only fold when not explicitly filtering by status
+  const active = fold ? list.filter(c => !RESOLVED_STATES.has(c.status)) : list;
+  const resolved = fold ? list.filter(c => RESOLVED_STATES.has(c.status)) : [];
+  active.forEach(c => pane.appendChild(buildCommentCard(c)));
+  if (resolved.length){
+    const grp = document.createElement('div'); grp.className = 'resolved-grp';
+    const head = document.createElement('button'); head.className = 'resolved-head';
+    head.innerHTML = `<i class="ti ti-chevron-${resolvedOpen?'down':'right'}"></i><span>Resolved</span><span class="rcount">${resolved.length}</span>`;
+    const body = document.createElement('div'); body.className = 'resolved-body'; body.style.display = resolvedOpen?'block':'none';
+    resolved.forEach(c => body.appendChild(buildCommentCard(c)));
+    head.onclick = () => { resolvedOpen = !resolvedOpen; body.style.display = resolvedOpen?'block':'none'; head.querySelector('i').className = `ti ti-chevron-${resolvedOpen?'down':'right'}`; };
+    grp.appendChild(head); grp.appendChild(body); pane.appendChild(grp);
+  }
+  renderAdvisorSection(pane);
+}
+function buildCommentCard(c){
     const card = document.createElement('div'); card.className = 'ccard'; card.dataset.id = c.id;
-    if (editingId === c.id){ card.style.cursor = 'default'; card.appendChild(editCard(c)); pane.appendChild(card); return; }
+    if (RESOLVED_STATES.has(c.status)) card.classList.add('is-resolved');
+    if (editingId === c.id){ card.style.cursor = 'default'; card.appendChild(editCard(c)); return card; }
     const st = c.status;
     const stColor = st==='staged'?'var(--info)':st==='merged'?'var(--success)':st==='queued'?'var(--warn)':st==='answered'?'var(--success)':st==='resolved'?'var(--text-3)':'var(--text-2)';
     const stBg = st==='staged'?'var(--info-bg)':st==='merged'?'var(--success-bg)':st==='queued'?'var(--warn-bg)':st==='answered'?'var(--success-bg)':'transparent';
@@ -423,9 +440,7 @@ function renderComments(){
     card.querySelector('.snip').onclick = () => jumpTo(c);
     card.querySelector('.body').onclick = () => jumpTo(c);
     card.querySelectorAll('.cact').forEach(b => b.onclick = e => { e.stopPropagation(); commentAction(c.id, b.dataset.act); });
-    pane.appendChild(card);
-  });
-  renderAdvisorSection(pane);
+    return card;
 }
 function renderAdvisorSection(pane){
   if (!advisorComments.length) return;
