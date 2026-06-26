@@ -117,6 +117,23 @@ function renderDoc(fragment){
   paintHighlights();
   restoreCursor();
   syncDown();
+  loadAdvisorComments(current);
+}
+// ---------- advisor comments surfaced in the owner reviewer ----------
+const ADVISOR_IDS = ['CJS','CCS'];
+const ADVISOR_NAME = { CJS:'Saldaña', CCS:'Seepersad' };
+let advisorComments = [];
+async function loadAdvisorComments(ch){
+  advisorComments = []; const dev = location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  for (const a of ADVISOR_IDS){
+    try {
+      let json = null;
+      if (dev){ const r = await fetch(`./advisor/${a}/${ch}.json`); if (r.ok) json = await r.json(); }
+      else { const t = tok(); if (!t) continue; json = (await getJson(t, `advisor/${a}/${ch}.json`)).json; }
+      (json?.comments||[]).forEach(c => { if (c.status!=='resolved') advisorComments.push({ ...c, _advisor:a }); });
+    } catch(e){}
+  }
+  if (current === ch){ renderComments(); paintHighlights(); }
 }
 // ---------- clickable cross-references (Figure / Table / Section / Chapter N.M) ----------
 const chapterByNum = n => CHAPTERS.find(c => c.n === n);
@@ -367,7 +384,7 @@ function renderComments(){
   const pane = document.getElementById('comments');
   const open = review.comments.filter(c => c.status === 'open').length;
   pane.innerHTML = `<div class="lbl">COMMENTS<span style="margin-left:auto">${review.comments.length} · ${open} open</span></div>`;
-  if (!review.comments.length){ pane.innerHTML += `<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text or click a figure to leave a comment.</div>`; return; }
+  if (!review.comments.length){ pane.innerHTML += `<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text or click a figure to leave a comment.</div>`; renderAdvisorSection(pane); return; }
   // filter / sort toolbar
   const bar = document.createElement('div'); bar.className = 'cbar';
   const present = new Set(review.comments.map(c => c.status));
@@ -406,6 +423,44 @@ function renderComments(){
     card.querySelectorAll('.cact').forEach(b => b.onclick = e => { e.stopPropagation(); commentAction(c.id, b.dataset.act); });
     pane.appendChild(card);
   });
+  renderAdvisorSection(pane);
+}
+function renderAdvisorSection(pane){
+  if (!advisorComments.length) return;
+  const lbl = document.createElement('div'); lbl.className = 'lbl adv-lbl';
+  lbl.innerHTML = `<i class="ti ti-users" style="margin-right:5px"></i>FROM ADVISORS<span style="margin-left:auto">${advisorComments.length}</span>`;
+  pane.appendChild(lbl);
+  advisorComments.forEach(c => {
+    const card = document.createElement('div'); card.className = 'ccard adv'; card.dataset.aid = c.id;
+    card.innerHTML = `<div class="row">
+        <span class="chip advchip"><i class="ti ti-user" style="font-size:11px;margin-right:3px"></i>${escapeHtml(ADVISOR_NAME[c._advisor]||c._advisor)}</span>
+        ${c.tag&&c.tag!=='other'?`<span class="chip" style="margin-left:5px">${c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:10px;margin-right:2px"></i>':''}${escapeHtml(c.tag)}</span>`:''}
+        ${c.status==='submitted'?'<span class="status" style="margin-left:auto;background:var(--success-bg);color:var(--success)">submitted</span>':''}</div>
+      <div class="snip">"${escapeHtml((c.anchor?.quote||'').slice(0,52))}"</div>
+      <div class="body">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}
+      <div class="advacts"><button class="btn aj" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-arrow-right"></i>Jump</button><button class="btn ar" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-message-check"></i>${c.resolution?'Update reply':'Mark addressed'}</button></div>
+      <div class="rform" style="display:none">
+        <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
+        <textarea class="r-note" rows="2" placeholder="How it was handled — the advisor sees this…">${escapeHtml(c.resolution?.note||'')}</textarea>
+        <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-primary r-save" style="padding:4px 10px;font-size:11.5px">Save to advisor</button><span class="r-stat" style="font-size:11px;color:var(--text-3)"></span></div></div>`;
+    card.onmouseenter = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.add('cmark-hot');
+    card.onmouseleave = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.remove('cmark-hot');
+    card.querySelector('.snip').onclick = () => jumpToAdvisor(c);
+    card.querySelector('.aj').onclick = () => jumpToAdvisor(c);
+    const form = card.querySelector('.rform');
+    card.querySelector('.ar').onclick = () => { form.style.display = form.style.display==='none'?'block':'none'; };
+    card.querySelector('.r-save').onclick = async () => { const stat = card.querySelector('.r-stat'); stat.textContent = 'Saving…';
+      const resolution = { state:card.querySelector('.r-state').value, note:card.querySelector('.r-note').value.trim(), ts:new Date().toISOString() };
+      try { await recordResolution(c._advisor, current, c.id, resolution); c.resolution = resolution; stat.textContent = 'Saved — visible to the advisor.'; setTimeout(()=>renderComments(),600); }
+      catch(e){ stat.textContent = 'Failed: ' + e.message; } };
+    pane.appendChild(card);
+  });
+}
+function jumpToAdvisor(c){
+  const mark = document.querySelector(`#doc .cmark[data-aid="${c.id}"]`);
+  const q = (c.anchor?.quote||'').replace(/\s+/g,' ').trim().slice(0,40);
+  const el = mark || [...document.querySelectorAll('#doc p, #doc li, #doc figure, #doc figcaption')].find(p => p.textContent.replace(/\s+/g,' ').includes(q));
+  if (el){ el.scrollIntoView({ behavior:'smooth', block:'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
 }
 function commentAction(id, act){
   const c = review.comments.find(x => x.id === id); if (!c) return;
@@ -457,8 +512,16 @@ function paintHighlights(){
     if (!el) return;
     if (!wrapInNode(el, needle, c)){ el.classList.add('cmark-el'); el.dataset.cid = c.id; el.style.setProperty('--mk', `var(--${c.tag})`); el.onclick = () => activateComment(c.id); }
   });
+  // advisor comments — distinct marker, jump to their card
+  advisorComments.forEach(c => {
+    if (c.kind === 'figure') return;
+    const q = (c.anchor?.quote||'').replace(/\s+/g,' ').trim(); if (q.length < 4) return;
+    const needle = q.slice(0, 50);
+    const el = blocks.find(e => e.textContent.replace(/\s+/g,' ').includes(needle.slice(0,40)));
+    if (el) wrapInNode(el, needle, c, true);
+  });
 }
-function wrapInNode(el, needle, c){
+function wrapInNode(el, needle, c, advisor){
   const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let node, probe = needle.slice(0, 30);
   while ((node = tw.nextNode())){
@@ -466,12 +529,16 @@ function wrapInNode(el, needle, c){
     if (idx >= 0){
       const r = document.createRange();
       r.setStart(node, idx); r.setEnd(node, Math.min(node.nodeValue.length, idx + needle.length));
-      const mk = document.createElement('mark'); mk.className = 'cmark'; mk.dataset.id = c.id; mk.dataset.tag = c.tag;
-      if (c.edit) mk.dataset.sugg = c.edit.op;
-      try { r.surroundContents(mk); mk.onclick = e => { e.stopPropagation(); activateComment(c.id); }; return true; } catch(e){ return false; }
+      const mk = document.createElement('mark'); mk.className = advisor ? 'cmark cmark-adv' : 'cmark';
+      if (advisor) mk.dataset.aid = c.id; else { mk.dataset.id = c.id; mk.dataset.tag = c.tag; if (c.edit) mk.dataset.sugg = c.edit.op; }
+      try { r.surroundContents(mk); mk.onclick = e => { e.stopPropagation(); advisor ? jumpToAdvisorCard(c.id) : activateComment(c.id); }; return true; } catch(e){ return false; }
     }
   }
   return false;
+}
+function jumpToAdvisorCard(aid){
+  const card = document.querySelector(`#comments .ccard.adv[data-aid="${aid}"]`);
+  card?.scrollIntoView({ behavior:'smooth', block:'center' }); card?.classList.add('flash'); setTimeout(() => card?.classList.remove('flash'), 1500);
 }
 function markFigure(doc, c){
   const figs = [...doc.querySelectorAll('figure')];
