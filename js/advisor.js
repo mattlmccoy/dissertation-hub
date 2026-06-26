@@ -120,7 +120,7 @@ function renderConnect(){
 function renderDoc(fragment){
   read.innerHTML = `<article id="doc">${fragment}</article>`;
   const doc = document.getElementById('doc');
-  fixFootnotes(doc); runKatex(doc); wireFigures(doc); linkCrossRefs(doc); buildNav(); markWhatsNew(doc); paintHighlights();
+  fixFootnotes(doc); runKatex(doc); wireFigures(doc); wireCitations(doc); linkCrossRefs(doc); buildNav(); markWhatsNew(doc); paintHighlights();
   if (review.cursor?.sec) document.getElementById(review.cursor.sec)?.scrollIntoView();
   syncDown();
 }
@@ -166,6 +166,28 @@ function fixFootnotes(doc){
     const rr=read.getBoundingClientRect(), ar=a.getBoundingClientRect(); tip.style.top=(ar.bottom-rr.top+read.scrollTop+6)+'px'; tip.style.left=Math.min(ar.left-rr.left,read.clientWidth-360)+'px';
     const close=ev=>{ if(!tip.contains(ev.target)){ tip.remove(); document.removeEventListener('mousedown',close); } }; setTimeout(()=>document.addEventListener('mousedown',close),0); }; });
   doc.querySelectorAll('a.footnote-back').forEach(a=>{ a.onclick=e=>{ e.preventDefault(); const t=doc.querySelector(a.getAttribute('href')); if(t){ t.scrollIntoView({behavior:'smooth',block:'center'}); t.classList.add('flash'); setTimeout(()=>t.classList.remove('flash'),1500); } }; });
+}
+// in-text citation → hover shows the reference(s); click jumps to the bibliography
+let citeHideT=null;
+function hideCiteTip(){ document.getElementById('cite-tip')?.remove(); }
+function wireCitations(doc){
+  doc.querySelectorAll('.citation').forEach(cit=>{ if(cit.dataset.citeWired) return; cit.dataset.citeWired='1'; cit.classList.add('cite-link');
+    const keys=(cit.dataset.cites||'').split(/\s+/).filter(Boolean);
+    cit.addEventListener('mouseenter',()=>showCiteTip(cit,keys,doc));
+    cit.addEventListener('mouseleave',()=>{ citeHideT=setTimeout(hideCiteTip,220); });
+    cit.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); const ref=keys[0]&&document.getElementById('ref-'+keys[0]); if(ref){ ref.scrollIntoView({behavior:'smooth',block:'center'}); ref.classList.add('flash'); setTimeout(()=>ref.classList.remove('flash'),1500); } }); });
+}
+function showCiteTip(cit,keys,doc){
+  clearTimeout(citeHideT); hideCiteTip();
+  const entries=keys.map(k=>document.getElementById('ref-'+k)).filter(Boolean); if(!entries.length) return;
+  const tip=document.createElement('div'); tip.id='cite-tip'; tip.className='cite-tip';
+  tip.innerHTML=entries.map(e=>`<div class="cite-entry">${e.innerHTML}</div>`).join('');
+  read.appendChild(tip);
+  const rr=read.getBoundingClientRect(), ar=cit.getBoundingClientRect();
+  tip.style.top=(ar.bottom-rr.top+read.scrollTop+6)+'px';
+  tip.style.left=Math.max(8,Math.min(ar.left-rr.left, read.clientWidth-400))+'px';
+  tip.addEventListener('mouseenter',()=>clearTimeout(citeHideT));
+  tip.addEventListener('mouseleave',()=>{ citeHideT=setTimeout(hideCiteTip,220); });
 }
 function figureLabel(fig){ const cap=fig.querySelector('figcaption')?.textContent.trim()||''; const m=cap.match(/^(Figure|Fig\.?|Table)\s*[\d.]+/i); return { quote:cap.slice(0,150), label:(m?m[0]:''), id:fig.querySelector('img')?.getAttribute('src')?.slice(-40)||'' }; }
 function wireFigures(doc){ doc.querySelectorAll('figure, img').forEach(el=>{ const fig=el.tagName==='FIGURE'?el:(el.closest('figure')||el); if(fig.dataset.figWired) return; fig.dataset.figWired='1'; fig.classList.add('fig-commentable');
