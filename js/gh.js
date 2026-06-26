@@ -22,7 +22,11 @@ export async function getJson(tok, path){
 }
 export async function putJson(tok, path, obj, sha, msg){
   const content = btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2))));
-  const r = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}`, { method:'PUT', headers:hdr(tok),
-    body: JSON.stringify({ message:msg, content, sha:sha||undefined }) });
+  const put = s => fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}`, { method:'PUT', headers:hdr(tok),
+    body: JSON.stringify({ message:msg, content, sha:s||undefined }) });
+  let r = await put(sha);
+  if (r.status === 409){                                   // stale sha — refetch the current one and retry once
+    try { const cur = await getJson(tok, path); r = await put(cur.sha); } catch(e){}
+  }
   if (!r.ok) throw new Error('github put failed: '+r.status); return (await r.json()).content.sha;
 }

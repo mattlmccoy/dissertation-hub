@@ -882,7 +882,7 @@ async function openReleasePanel(){
   document.getElementById('rel-save').onclick = async () => {
     advs.forEach(a => { rel[a].released = [...document.querySelectorAll(`input[data-a="${a}"]:checked`)].map(x => x.dataset.ch); });
     const stat = document.getElementById('rel-stat'); stat.textContent = 'Publishing…';
-    try { await putJson(t, 'release.json', rel, sha, 'release: update advisor chapter gate'); stat.textContent = 'Published ✓'; }
+    try { sha = await putJson(t, 'release.json', rel, sha, 'release: update advisor chapter gate'); stat.textContent = 'Published ✓'; }
     catch(e){ stat.textContent = 'Failed: ' + e.message; }
   };
 }

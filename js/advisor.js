@@ -16,7 +16,7 @@ const deleteComment = (r, id) => ({ ...r, comments:r.comments.filter(c => c.id!=
 const _API='https://api.github.com', _OWNER='mattlmccoy', _REPO='dissertation-tracker-data';
 const _hdr = t => ({ Authorization:`Bearer ${t}`, Accept:'application/vnd.github+json' });
 async function getJson(t, path){ const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}?t=${Date.now()}`,{headers:_hdr(t),cache:'no-store'}); if(r.status===404) return {json:null,sha:null}; if(!r.ok) throw new Error('GitHub '+r.status); const d=await r.json(); if(typeof d.content!=='string'||!d.content.trim()) throw new Error('empty content'); return {json:JSON.parse(decodeURIComponent(escape(atob(d.content.replace(/\s/g,''))))),sha:d.sha}; }
-async function putJson(t, path, obj, sha, msg){ const content=btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2)))); const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content,sha:sha||undefined})}); if(!r.ok) throw new Error('put failed: '+r.status); return (await r.json()).content.sha; }
+async function putJson(t, path, obj, sha, msg){ const content=btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2)))); const put=s=>fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content,sha:s||undefined})}); let r=await put(sha); if(r.status===409){ try{ const cur=await getJson(t,path); r=await put(cur.sha); }catch(e){} } if(!r.ok) throw new Error('put failed: '+r.status); return (await r.json()).content.sha; }
 
 const ADVISOR = window.ADVISOR || { id: '?', name: 'Reviewer' };
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
