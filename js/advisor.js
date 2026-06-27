@@ -123,6 +123,9 @@ function renderDoc(fragment){
   fixFootnotes(doc); runKatex(doc); wireFigures(doc); wireCitations(doc); linkCrossRefs(doc); buildNav(); markWhatsNew(doc); paintHighlights();
   if (review.cursor?.sec) document.getElementById(review.cursor.sec)?.scrollIntoView();
   syncDown();
+  if (pendingJump){ const q=pendingJump; pendingJump=null; setTimeout(()=>{
+    const el=[...document.querySelectorAll('#doc p, #doc li, #doc figure, #doc figcaption, #doc h2, #doc h3')].find(p=>p.textContent.replace(/\s+/g,' ').includes(q.replace(/^[^:]*:\s*/,'').slice(0,40)));
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),2000); } }, 350); }
 }
 // "what changed since you last looked": per-section content fingerprint, compared to the last visit
 function _hash(s){ let h = 0; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0; return h; }
@@ -411,17 +414,74 @@ async function loadResponses(){
   }
   renderResponses(groups);
 }
+let pendingJump = null;          // a quote to scroll to + flash after the next chapter render
+const _respFigCache = {};        // ch -> published HTML (so we extract figures without refetching)
 function renderResponses(groups){
-  if(!groups.length){ read.innerHTML=`<div class="empty">No submitted comments yet. Once you submit comments and the author responds, they'll appear here.</div>`; return; }
-  const sections=groups.map(g=>{
-    const items=g.comments.map(c=>`<div class="resp-item">
+  if(!groups.length){ read.innerHTML=`<div class="empty">Nothing here yet. Once you've submitted comments and the author has replied, you'll see their replies here.</div>`; return; }
+  const item=(c,ch)=>{
+    const fups=(c.followups||[]).map(f=>`<div class="resp-fup"><span class="resp-fup-h">You · ${(f.ts||'').slice(0,10)}</span>${escapeHtml(f.text)}</div>`).join('');
+    return `<div class="resp-item" data-cid="${escapeHtml(c.id)}" data-ch="${escapeHtml(ch)}" data-q="${escapeHtml((c.anchor?.quote||'').slice(0,60))}" data-fig="${c.kind==='figure'?'1':''}">
         <div class="resp-q">"${escapeHtml((c.anchor?.quote||'').slice(0,90))}"</div>
         <div class="resp-b">${escapeHtml(c.body||'')}</div>${suggHtml(c)}
-        ${c.resolution?resolHtml(c):`<div class="resol resol-noted"><div class="resol-h"><i class="ti ti-clock"></i>Awaiting response</div></div>`}</div>`).join('');
-    return `<div class="resp-sec"><div class="resp-ch">Chapter ${chMeta(g.ch).n} · ${escapeHtml(shortTitle(chMeta(g.ch).title))}</div>${items}</div>`;
-  }).join('');
-  read.innerHTML=`<div class="resp-wrap"><h1 class="ol-h1">Responses to your comments</h1>
-    <p class="ol-intro">How the author addressed each comment you submitted. This is read-only.</p>${sections}</div>`;
+        ${c.resolution?resolHtml(c):`<div class="resol resol-noted"><div class="resol-h"><i class="ti ti-clock"></i>Awaiting reply</div></div>`}
+        ${c.kind==='figure'?`<div class="resp-fig"></div>`:''}${fups}
+        <div class="resp-acts">${ch!=='__outline__'?`<button class="btn resp-context"><i class="ti ti-arrow-right"></i>See in context</button>`:''}<button class="btn resp-reply"><i class="ti ti-message"></i>Reply</button></div>
+        <div class="resp-replybox" style="display:none"><textarea rows="2" placeholder="If this wasn't fully addressed, add a note for the author…"></textarea><div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary resp-send">Send reply</button><button class="btn resp-cancel">Cancel</button></div></div>
+      </div>`;
+  };
+  const head=g=>g.ch==='__outline__'?'Proposed outline':`Chapter ${chMeta(g.ch).n} · ${escapeHtml(shortTitle(chMeta(g.ch).title))}`;
+  const sections=groups.map(g=>`<div class="resp-sec"><div class="resp-ch">${head(g)}</div>${g.comments.map(c=>item(c,g.ch)).join('')}</div>`).join('');
+  read.innerHTML=`<div class="resp-wrap"><h1 class="ol-h1">Responses to your comments</h1>${sections}</div>`;
+  read.querySelectorAll('.resp-item').forEach(el=>{
+    el.querySelector('.resp-context')?.addEventListener('click',()=>seeInContext(el.dataset.ch, el.dataset.q));
+    const rb=el.querySelector('.resp-replybox');
+    el.querySelector('.resp-reply').addEventListener('click',()=>{ rb.style.display=rb.style.display==='none'?'block':'none'; if(rb.style.display==='block') rb.querySelector('textarea').focus(); });
+    el.querySelector('.resp-cancel').addEventListener('click',()=>{ rb.style.display='none'; });
+    el.querySelector('.resp-send').addEventListener('click',()=>replyToResponse(el.dataset.cid, el.dataset.ch, rb));
+  });
+  embedChangedFigures(groups);
+}
+function seeInContext(ch, q){
+  if(ch==='__outline__'){ loadOutline(); return; }
+  pendingJump=q; loadChapter(ch);
+}
+async function replyToResponse(cid, ch, rb){
+  const ta=rb.querySelector('textarea'); const v=ta.value.trim(); if(!v) return;
+  const t=tok(); if(!t){ flash('Add your access key first.'); return; }
+  try{
+    const path=`advisor/${effId()}/${ch}.json`;
+    const { json, sha }=await getJson(t, path);
+    const c=(json?.comments||[]).find(x=>x.id===cid); if(!c){ flash('Could not find that comment.'); return; }
+    c.followups=[...(c.followups||[]), { text:v, ts:new Date().toISOString() }];
+    c.status='submitted'; c.reopened=true;
+    await putJson(t, path, json, sha, `reply(${effId()}): ${ch} ${cid}`);
+    const fup=document.createElement('div'); fup.className='resp-fup'; fup.innerHTML=`<span class="resp-fup-h">You · ${new Date().toISOString().slice(0,10)}</span>${escapeHtml(v)}`;
+    rb.before(fup); rb.style.display='none'; ta.value='';
+    flash('Reply sent to the author.');
+  }catch(e){ flash('Reply failed: '+e.message); }
+}
+async function embedChangedFigures(groups){
+  const t=tok(); const dev=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  const chs=[...new Set(groups.filter(g=>g.ch!=='__outline__' && g.comments.some(c=>c.kind==='figure')).map(g=>g.ch))];
+  for(const ch of chs){
+    let html=_respFigCache[ch]||null;
+    if(!html){ try{
+      if(dev){ const r=await fetch(`./chapters/${ch}.html`); if(r.ok) html=await r.text(); }
+      else if(t){ const r=await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/content/${ch}.html?t=${Date.now()}`,{headers:{Authorization:`Bearer ${t}`,Accept:'application/vnd.github.raw'},cache:'no-store'}); if(r.ok) html=await r.text(); }
+    }catch(e){} if(html) _respFigCache[ch]=html; }
+    if(!html) continue;
+    const tmp=document.createElement('div'); tmp.innerHTML=html; const figs=[...tmp.querySelectorAll('figure')];
+    document.querySelectorAll(`.resp-item[data-fig="1"][data-ch="${ch}"]`).forEach(it=>{
+      // captions carry no "Figure N" number in the raw HTML (added at render time), so match by caption text
+      const q=it.dataset.q||''; const bare=q.replace(/(Figure|Fig\.?|Table)\s*[\d.]+[.:]*\s*/gi,'').replace(/\s+/g,' ').trim();
+      const probe=bare.slice(0,35);
+      const fig=probe ? figs.find(f=>f.textContent.replace(/\s+/g,' ').includes(probe)) : null;
+      const slot=it.querySelector('.resp-fig');
+      if(fig && slot){ slot.innerHTML=`<div class="resp-fig-lbl">Updated figure</div>${fig.outerHTML}`; runKatex(slot); }
+      else slot?.remove();
+    });
+  }
+  document.querySelectorAll('.resp-fig:empty').forEach(s=>s.remove());
 }
 // ---------- proposed outline (available before chapters are released) ----------
 async function loadOutline(){

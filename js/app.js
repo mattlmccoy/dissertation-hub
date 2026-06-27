@@ -137,6 +137,8 @@ const ADVISOR_IDS = ['CJS','CCS'];
 const ADVISOR_NAME = { CJS:'Saldaña', CCS:'Seepersad' };
 // label a comment's source: named advisor → their name; a shared lab reviewer (general-<slug>) → the name they entered
 const whoLabel = c => ADVISOR_NAME[c._advisor] || (/^general-/.test(c._advisor||'') ? (c.author || 'Lab reviewer') : c._advisor);
+// an advisor's follow-up replies (when they felt a response was incomplete) + a re-opened flag
+const fupHtml = c => (c.followups||[]).map(f => `<div class="rel-fup"><i class="ti ti-corner-down-right" style="font-size:13px"></i> ${escapeHtml(f.text)} <span style="color:var(--text-3);font-size:11px">· ${(f.ts||'').slice(0,10)}</span></div>`).join('');
 let advisorComments = [];
 async function loadAdvisorComments(ch){
   advisorComments = []; const dev = location.hostname==='localhost' || location.hostname==='127.0.0.1';
@@ -618,7 +620,7 @@ function renderAdvisorSection(pane){
         ${c.tag&&c.tag!=='other'?`<span class="chip" style="margin-left:5px">${c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:10px;margin-right:2px"></i>':''}${escapeHtml(c.tag)}</span>`:''}
         ${c.status==='submitted'?'<span class="status" style="margin-left:auto;background:var(--success-bg);color:var(--success)">submitted</span>':''}</div>
       <div class="snip">"${escapeHtml((c.anchor?.quote||'').slice(0,52))}"</div>
-      <div class="body">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}
+      <div class="body">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}${fupHtml(c)}
       <div class="advacts"><button class="btn aj" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-arrow-right"></i>Jump</button><button class="btn ar" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-message-check"></i>${c.resolution?'Update reply':'Mark addressed'}</button></div>
       <div class="rform" style="display:none">
         <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
@@ -1303,7 +1305,7 @@ async function openReleasePanel(){
           <div class="rel-cmt-h">${escapeHtml(chMeta(chapter).n+'')}. ${escapeHtml(shortTitle(chMeta(chapter).title))} · ${escapeHtml(c.anchor?.section||'')} ${c.status==='submitted'?'<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:6px">submitted</span>':c.status==='resolved'?'<span class="chip" style="margin-left:6px">withdrawn</span>':''}</div>
           <div class="rel-cmt-q">"${escapeHtml((c.anchor?.quote||'').slice(0,90))}"</div>
           <div class="rel-cmt-b">${escapeHtml(c.body||'')}</div>${c.edit?`<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${c.edit.op}</div>${c.edit.op==='delete'?`<del>${escapeHtml(c.edit.find||'')}</del>`:`<del>${escapeHtml(c.edit.find||'')}</del> <ins>${escapeHtml(c.edit.replacement||'')}</ins>`}</div>`:''}
-          ${resolHtml(c)}
+          ${resolHtml(c)}${fupHtml(c)}
           <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn rel-open" style="padding:3px 10px;font-size:12px"><i class="ti ti-arrow-right"></i>Open in context</button><button class="btn rel-rec" style="padding:3px 10px;font-size:12px"><i class="ti ti-message-check"></i>${c.resolution?'Update':'Record'} resolution</button></div>
           <div class="rform" style="display:none">
             <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
