@@ -269,6 +269,10 @@ body.focusmode .nav,body.focusmode .comments{display:none!important}
   body.sheet-open #sheetfab{display:none}
   .btn,.icbtn{min-height:38px} .nav a{padding:10px 9px}
   .popover{left:8px!important;right:8px!important;transform:none!important;width:auto}
+  /* mobile home = a recap first: float the "Needs you" inbox/status to the top */
+  #home-wrap{display:flex;flex-direction:column}
+  #home-wrap>#inbox-panel{order:-1;margin-top:0!important;display:block!important}
+  #home-wrap>.home-allch{order:1}
 }
 body.focusmode #doc{max-width:760px}
 /* help overlay */

@@ -375,7 +375,6 @@ function selToPopover(){
   pending = anchorFromSelection({ text, page:null, rects });
   pending.section = headingFor(range.startContainer);
   showPopover(pending, rects);
-  if (window.innerWidth <= 700) document.body.classList.add('sheet-open');   // surface the rail on mobile
 }
 read.addEventListener('mouseup', selToPopover);
 read.addEventListener('touchend', () => setTimeout(selToPopover, 10));   // touch selection on mobile
@@ -1092,9 +1091,9 @@ function homeHtml(){
         <div style="height:5px;border-radius:4px;background:var(--bg-3);overflow:hidden;margin-bottom:8px"><div style="width:${done?100:pct}%;height:100%;background:${bar}"></div></div>
         <div style="font-size:11px;color:var(--text-2);display:flex"><span>${status}</span><span style="margin-left:auto">${right}</span></div></div>`;
   }).join('');
-  return `<div style="max-width:900px;margin:0 auto;padding:28px 24px 90px">
+  return `<div id="home-wrap" style="max-width:900px;margin:0 auto;padding:28px 24px 90px">
       ${cont}
-      <div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">ALL CHAPTERS</div>
+      <div class="home-allch" style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">ALL CHAPTERS</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div>
       <div id="inbox-panel" class="ibx" style="display:none;margin-top:28px;margin-bottom:0"></div></div>`;
 }

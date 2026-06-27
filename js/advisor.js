@@ -238,8 +238,7 @@ let pending=null;
 function selToPopover(){ if(document.getElementById('pop')) return; const sel=window.getSelection(); const text=sel.toString();
   if(!text.trim()||sel.rangeCount===0) return; const range=sel.getRangeAt(0); if(!range.startContainer.parentElement?.closest('#doc')) return;
   const rr=read.getBoundingClientRect(); const rects=[...range.getClientRects()].map(r=>({x:r.x-rr.x,y:r.y-rr.y+read.scrollTop,w:r.width,h:r.height}));
-  pending=anchorFromSelection({text,page:null,rects}); pending.section=headingFor(range.startContainer); showPopover(pending,rects);
-  if(window.innerWidth<=700) document.body.classList.add('sheet-open'); }
+  pending=anchorFromSelection({text,page:null,rects}); pending.section=headingFor(range.startContainer); showPopover(pending,rects); }
 read.addEventListener('mouseup', selToPopover);
 read.addEventListener('touchend', ()=>setTimeout(selToPopover,10));
 function showPopover(anchor,rects,defaultTag='wording'){
