@@ -139,6 +139,7 @@ const ADVISOR_NAME = { CJS:'Saldaña', CCS:'Seepersad' };
 const whoLabel = c => ADVISOR_NAME[c._advisor] || (/^general-/.test(c._advisor||'') ? (c.author || 'Lab reviewer') : c._advisor);
 // an advisor's follow-up replies (when they felt a response was incomplete) + a re-opened flag
 const fupHtml = c => (c.followups||[]).map(f => `<div class="rel-fup"><i class="ti ti-corner-down-right" style="font-size:13px"></i> ${escapeHtml(f.text)} <span style="color:var(--text-3);font-size:11px">· ${(f.ts||'').slice(0,10)}</span></div>`).join('');
+const threadHtml = c => (c.thread||[]).map(m => `<div class="rel-fup" style="border-left-color:${m.author==='author'?'var(--accent)':'var(--success)'}"><b>${m.author==='author'?'You':'Reviewer'}</b> <span style="color:var(--text-3);font-size:11px">· ${fmtDate(m.ts)}</span><div>${escapeHtml(m.text)}</div></div>`).join('');
 let advisorComments = [];
 async function loadAdvisorComments(ch){
   advisorComments = []; const dev = location.hostname==='localhost' || location.hostname==='127.0.0.1';
@@ -1294,19 +1295,33 @@ async function openReleasePanel(){
     const m = p.match(/^advisor\/([^/]+)\/(.+)\.json$/); const id = m[1], ch = m[2];
     try { const r = await getJson(t, p); (r.json?.comments||[]).forEach(c => (inbox[id] = inbox[id]||[]).push({ chapter:ch, c })); } catch(e){}
   }));
+  const notesState = await loadAdvisorNotes(t);   // owner-private notes, keyed by comment id
   const idLabel = id => ADVISOR_NAME[id] || (/^general-/.test(id) ? (inbox[id]?.[0]?.c.author || 'Lab reviewer') : (rel[id]?.name || id));
   // inbox sections: named advisors first, then per-person lab reviewers
   const inboxIds = Object.keys(inbox).sort((a,b) => (/^general-/.test(a)?1:0) - (/^general-/.test(b)?1:0) || idLabel(a).localeCompare(idLabel(b)));
   const rows = CHAPTERS.map(c => `<tr><td>${c.n}. ${escapeHtml(shortTitle(c.title))}</td>${advs.map(a => `<td style="text-align:center"><input type="checkbox" data-a="${a}" data-ch="${c.id}" ${(rel[a].released||[]).includes(c.id)?'checked':''}></td>`).join('')}</tr>`).join('');
+  const unreadOf = a => (inbox[a]||[]).filter(({c}) => !c.read && c.status==='submitted').length;
   const inboxHtml = (inboxIds.length ? inboxIds : []).map(a => {
-    const items = inbox[a]||[];
-    return `<div class="rel-inbox"><div class="rel-inbox-h"><b>${escapeHtml(idLabel(a))}</b>${/^general-/.test(a)?'<span class="chip" style="margin-left:5px">lab</span>':''}<span class="chip" style="background:var(--accent-bg);color:var(--accent)">${items.length} comment${items.length!==1?'s':''}</span></div>${
-      items.length ? items.map(({chapter, c}) => `<div class="rel-cmt" data-ch="${chapter}" data-a="${a}" data-cid="${c.id}" data-q="${escapeHtml((c.anchor?.quote||'').slice(0,60))}">
-          <div class="rel-cmt-h">${escapeHtml(chMeta(chapter).n+'')}. ${escapeHtml(shortTitle(chMeta(chapter).title))} · ${escapeHtml(c.anchor?.section||'')}${c.created_ts?` · <span style="color:var(--text-3)">${fmtDate(c.created_ts)}</span>`:''} ${c.status==='submitted'?'<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:6px">submitted</span>':c.status==='resolved'?'<span class="chip" style="margin-left:6px">withdrawn</span>':''}${c.reopened?'<span class="chip" style="background:var(--warn-bg);color:var(--warn);margin-left:6px">re-opened</span>':''}</div>
+    const items = inbox[a]||[]; const unread = unreadOf(a);
+    return `<div class="rel-inbox"><div class="rel-inbox-h"><b>${escapeHtml(idLabel(a))}</b>${/^general-/.test(a)?'<span class="chip" style="margin-left:5px">lab</span>':''}<span class="chip" style="background:var(--accent-bg);color:var(--accent)">${items.length} comment${items.length!==1?'s':''}</span>
+        ${unread?`<span class="chip" style="background:var(--warn-bg);color:var(--warn);margin-left:auto">${unread} unread</span><button class="btn rel-readall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px"><i class="ti ti-checks"></i>Mark all read</button>`:`<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:auto"><i class="ti ti-check" style="font-size:12px"></i> all read</span>`}
+        <button class="btn rel-sendall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px" ${unread?'disabled title="Read every comment from this reviewer first"':''}><i class="ti ti-send"></i>Send unsent to Claude</button></div>${
+      items.length ? items.map(({chapter, c}) => `<div class="rel-cmt${c.read?' is-read':''}" data-ch="${chapter}" data-a="${a}" data-cid="${c.id}" data-q="${escapeHtml((c.anchor?.quote||'').slice(0,60))}">
+          <div class="rel-cmt-h"><label class="rel-read"><input type="checkbox" class="rel-readbox" ${c.read?'checked':''}>read</label> ${escapeHtml(chMeta(chapter).n+'')}. ${escapeHtml(shortTitle(chMeta(chapter).title))} · ${escapeHtml(c.anchor?.section||'')}${c.created_ts?` · <span style="color:var(--text-3)">${fmtDate(c.created_ts)}</span>`:''} ${c.sent?'<span class="chip" style="background:var(--info-bg);color:var(--info);margin-left:6px">sent to Claude</span>':c.status==='submitted'?'<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:6px">submitted</span>':c.status==='resolved'?'<span class="chip" style="margin-left:6px">withdrawn</span>':''}${c.reopened?'<span class="chip" style="background:var(--warn-bg);color:var(--warn);margin-left:6px">re-opened</span>':''}</div>
           <div class="rel-cmt-q">"${escapeHtml((c.anchor?.quote||'').slice(0,90))}"</div>
           <div class="rel-cmt-b">${escapeHtml(c.body||'')}</div>${c.edit?`<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${c.edit.op}</div>${c.edit.op==='delete'?`<del>${escapeHtml(c.edit.find||'')}</del>`:`<del>${escapeHtml(c.edit.find||'')}</del> <ins>${escapeHtml(c.edit.replacement||'')}</ins>`}</div>`:''}
-          ${resolHtml(c)}${fupHtml(c)}
-          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn rel-open" style="padding:3px 10px;font-size:12px"><i class="ti ti-arrow-right"></i>Open in context</button><button class="btn rel-rec" style="padding:3px 10px;font-size:12px"><i class="ti ti-message-check"></i>${c.resolution?'Update':'Record'} resolution</button></div>
+          ${resolHtml(c)}${fupHtml(c)}${threadHtml(c)}
+          ${(notesState.notes[c.id]||[]).map(n=>`<div class="rel-note"><i class="ti ti-lock" style="font-size:12px"></i> ${escapeHtml(n.text)} <span style="color:var(--text-3);font-size:11px">· private · ${fmtDate(n.ts)}</span></div>`).join('')}
+          <div class="rel-acts">
+            <button class="btn rel-open"><i class="ti ti-arrow-right"></i>Open in context</button>
+            <button class="btn rel-reply"><i class="ti ti-message"></i>Reply</button>
+            <button class="btn rel-note"><i class="ti ti-note"></i>Private note</button>
+            <button class="btn rel-suggest"><i class="ti ti-pencil"></i>Suggest edit</button>
+            <button class="btn rel-rec"><i class="ti ti-message-check"></i>${c.resolution?'Update':'Record'} resolution</button>
+            <button class="btn rel-send" ${(!c.read||c.sent)?`disabled title="${c.sent?'Already sent':'Mark this read first'}"`:''}><i class="ti ti-send"></i>${c.sent?'Sent':'Send to Claude'}</button></div>
+          <div class="rel-replybox rel-pop" style="display:none"><textarea rows="2" placeholder="Reply to the reviewer — they'll see this on their portal…"></textarea><div class="rel-popacts"><button class="btn btn-primary rel-reply-save">Send reply</button><button class="btn rel-x">Cancel</button></div></div>
+          <div class="rel-notebox rel-pop" style="display:none"><textarea rows="2" placeholder="Private note — only you see this (e.g. how/when to process)…"></textarea><div class="rel-popacts"><button class="btn btn-primary rel-note-save">Save note</button><button class="btn rel-x">Cancel</button></div></div>
+          <div class="rel-suggestbox rel-pop" style="display:none"><select class="rel-sug-op">${['replace','insert','delete'].map(o=>`<option value="${o}"${c.edit?.op===o?' selected':''}>${o==='replace'?'Replace':o==='insert'?'Insert after':'Delete'}</option>`).join('')}</select><textarea class="rel-sug-find" rows="2" placeholder="Exact text to find (verbatim)…">${escapeHtml(c.edit?.find||'')}</textarea><textarea class="rel-sug-repl" rows="2" placeholder="Replacement / insertion text…">${escapeHtml(c.edit?.replacement||'')}</textarea><div class="rel-popacts"><button class="btn btn-primary rel-sug-save">Attach edit</button><button class="btn rel-x">Cancel</button></div></div>
           <div class="rform" style="display:none">
             <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
             <textarea class="r-note" rows="2" placeholder="How it was handled — the advisor sees this, keep it plain and reviewer-facing…">${escapeHtml(c.resolution?.note||'')}</textarea>
@@ -1319,17 +1334,59 @@ async function openReleasePanel(){
     <div style="display:flex;gap:8px;margin:14px 0 6px;align-items:center"><button class="btn btn-primary" id="rel-save">Save &amp; publish</button><span id="rel-stat" style="font-size:12px;color:var(--text-3)"></span></div>
     <div class="rel-links">${advs.map(a => `<div><b>${escapeHtml(rel[a].name||a)}</b> → <code>${escapeHtml(base + (a==='general'?'review-lab.html':a+'.html'))}</code></div>`).join('')}</div>
     <div class="rel-sec" style="margin-top:26px">Comments received from advisors</div>${inboxHtml}`;
+  const refresh = () => openReleasePanel();
+  // per-advisor: mark all read + send-unsent batch
+  document.querySelectorAll('.rel-readall').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Marking…';
+    const a = b.dataset.a;
+    try { for (const {chapter, c} of (inbox[a]||[])) if (!c.read) await markAdvisorRead(a, chapter, c.id); refresh(); }
+    catch(e){ b.textContent = 'Failed'; }
+  });
+  document.querySelectorAll('.rel-sendall').forEach(b => b.onclick = async () => {
+    const a = b.dataset.a; const todo = (inbox[a]||[]).filter(({c}) => c.read && !c.sent && c.status==='submitted');
+    if (!todo.length){ b.textContent = 'Nothing to send'; return; }
+    if (!confirm(`Send ${todo.length} comment${todo.length!==1?'s':''} from ${idLabel(a)} to Claude?`)) return;
+    b.disabled = true; b.textContent = 'Sending…';
+    try { for (const {chapter, c} of todo) await sendAdvisorToClaude(a, chapter, c); refresh(); }
+    catch(e){ b.textContent = 'Failed: ' + e.message; }
+  });
   document.querySelectorAll('.rel-cmt').forEach(el => {
+    const a = el.dataset.a, ch = el.dataset.ch, cid = el.dataset.cid;
+    const card = (inbox[a]||[]).find(x => x.c.id === cid)?.c || {};
+    const toggle = sel => { const box = el.querySelector(sel); el.querySelectorAll('.rel-pop').forEach(p => { if (p !== box) p.style.display = 'none'; }); box.style.display = box.style.display === 'none' ? 'block' : 'none'; if (box.style.display === 'block') box.querySelector('textarea')?.focus(); };
+    el.querySelectorAll('.rel-x').forEach(x => x.onclick = () => el.querySelectorAll('.rel-pop, .rform').forEach(p => p.style.display = 'none'));
     el.querySelector('.rel-open').onclick = () => {
-      const ch = el.dataset.ch, q = el.dataset.q;
+      const q = el.dataset.q;
       enterChapter(ch); setTimeout(() => { const tg = [...document.querySelectorAll('#doc p, #doc li, #doc figcaption')].find(p => p.textContent.replace(/\s+/g,' ').includes(q.slice(0,40))); if (tg){ tg.scrollIntoView({behavior:'smooth',block:'center'}); tg.classList.add('flash'); setTimeout(()=>tg.classList.remove('flash'),1500); } }, 1900);
+    };
+    el.querySelector('.rel-readbox').onchange = async e => { try { await markAdvisorRead(a, ch, cid, e.target.checked); refresh(); } catch(err){ alert('Failed: ' + err.message); } };
+    el.querySelector('.rel-reply').onclick = () => toggle('.rel-replybox');
+    el.querySelector('.rel-note').onclick = () => toggle('.rel-notebox');
+    el.querySelector('.rel-suggest').onclick = () => toggle('.rel-suggestbox');
+    el.querySelector('.rel-reply-save').onclick = async () => {
+      const txt = el.querySelector('.rel-replybox textarea').value.trim(); if (!txt) return;
+      try { await replyToAdvisorComment(a, ch, cid, txt); refresh(); } catch(e){ alert('Failed: ' + e.message); }
+    };
+    el.querySelector('.rel-note-save').onclick = async () => {
+      const txt = el.querySelector('.rel-notebox textarea').value.trim(); if (!txt) return;
+      try { await savePrivateNote(notesState, cid, txt); refresh(); } catch(e){ alert('Failed: ' + e.message); }
+    };
+    el.querySelector('.rel-sug-save').onclick = async () => {
+      const op = el.querySelector('.rel-sug-op').value, find = el.querySelector('.rel-sug-find').value.trim(), replacement = el.querySelector('.rel-sug-repl').value.trim();
+      if (!find && op !== 'insert'){ alert('Enter the text to find.'); return; }
+      try { await suggestAdvisorEdit(a, ch, cid, { op, find, replacement }); refresh(); } catch(e){ alert('Failed: ' + e.message); }
+    };
+    el.querySelector('.rel-send').onclick = async () => {
+      if (!confirm('Send this comment to Claude to address?')) return;
+      const b = el.querySelector('.rel-send'); b.disabled = true; b.textContent = 'Sending…';
+      try { await sendAdvisorToClaude(a, ch, card); refresh(); } catch(e){ b.textContent = 'Failed: ' + e.message; }
     };
     const form = el.querySelector('.rform');
     el.querySelector('.rel-rec').onclick = () => { form.style.display = form.style.display === 'none' ? 'block' : 'none'; };
     el.querySelector('.r-save').onclick = async () => {
       const stat = el.querySelector('.r-stat'); stat.textContent = 'Saving…';
       const resolution = { state: el.querySelector('.r-state').value, note: el.querySelector('.r-note').value.trim(), ts: new Date().toISOString() };
-      try { await recordResolution(el.dataset.a, el.dataset.ch, el.dataset.cid, resolution); stat.textContent = 'Saved — the advisor will see this on their portal.'; }
+      try { await recordResolution(a, ch, cid, resolution); stat.textContent = 'Saved — the advisor will see this.'; setTimeout(refresh, 700); }
       catch(e){ stat.textContent = 'Failed: ' + e.message; }
     };
   });
@@ -1350,13 +1407,41 @@ function resolHtml(c){
   return `<div class="resol resol-${r.state||'noted'}"><div class="resol-h"><i class="ti ti-${icon}"></i>${label}${r.ts?` · ${(r.ts||'').slice(0,10)}`:''}</div>${r.note?`<div>${escapeHtml(r.note)}</div>`:''}${diff}</div>`;
 }
 // write a resolution into an advisor's comment file so it appears on their portal
-async function recordResolution(advisorId, ch, cid, resolution){
+// mutate one advisor comment in advisor/<id>/<ch>.json (fetch -> apply -> push)
+async function _mutateAdvisorComment(advisorId, ch, cid, fn, msg){
   const t = tok();
   const { json, sha } = await getJson(t, `advisor/${advisorId}/${ch}.json`);
   if (!json) throw new Error('advisor file not found');
   const c = (json.comments||[]).find(x => x.id === cid); if (!c) throw new Error('comment not found');
-  c.resolution = resolution;
-  await putJson(t, `advisor/${advisorId}/${ch}.json`, json, sha, `resolution: ${advisorId} ${ch} ${cid}`);
+  fn(c);
+  await putJson(t, `advisor/${advisorId}/${ch}.json`, json, sha, msg);
+}
+async function recordResolution(advisorId, ch, cid, resolution){
+  await _mutateAdvisorComment(advisorId, ch, cid, c => { c.resolution = resolution; c.read = true; }, `resolution: ${advisorId} ${ch} ${cid}`);
+}
+const markAdvisorRead = (advisorId, ch, cid, val=true) => _mutateAdvisorComment(advisorId, ch, cid, c => { c.read = val; }, `read: ${advisorId} ${ch} ${cid}`);
+const replyToAdvisorComment = (advisorId, ch, cid, text) => _mutateAdvisorComment(advisorId, ch, cid, c => { c.thread = [...(c.thread||[]), { author:'author', text, ts:new Date().toISOString() }]; c.read = true; }, `reply: ${advisorId} ${ch} ${cid}`);
+const suggestAdvisorEdit = (advisorId, ch, cid, edit) => _mutateAdvisorComment(advisorId, ch, cid, c => { c.edit = edit; c.read = true; }, `suggest: ${advisorId} ${ch} ${cid}`);
+// owner-private notes live in reviews/advisor_notes.json (advisor portal never fetches it)
+async function loadAdvisorNotes(t){ try { const r = await getJson(t, 'reviews/advisor_notes.json'); return { notes:r.json||{}, sha:r.sha }; } catch(e){ return { notes:{}, sha:null }; } }
+async function savePrivateNote(state, cid, text){
+  state.notes[cid] = [...(state.notes[cid]||[]), { text, ts:new Date().toISOString() }];
+  state.sha = await putJson(tok(), 'reviews/advisor_notes.json', state.notes, state.sha, 'notes: private advisor note');
+}
+// copy an advisor comment into the owner review + queue an apply-edits job (the existing pipeline)
+async function sendAdvisorToClaude(advisorId, ch, c){
+  const t = tok();
+  const { json, sha } = await getJson(t, `reviews/${ch}.json`).catch(() => ({ json:null, sha:null }));
+  let review = json || newReview(ch, '');
+  review = addComment(review, { anchor:c.anchor, kind:c.kind, tag:c.edit?'edit':(c.tag||'wording'), body:c.body, edit:c.edit||null });
+  const nc = review.comments[review.comments.length-1];
+  nc.from_advisor = { id:advisorId, cid:c.id, name: ADVISOR_NAME[advisorId] || c.author || advisorId }; nc.status = 'queued';
+  await putJson(t, `reviews/${ch}.json`, review, sha, `review: incorporate ${advisorId} comment ${c.id}`);
+  const jr = await getJson(t, 'jobs.json').catch(() => ({ json:null, sha:null }));
+  const jobs = Array.isArray(jr.json) ? jr.json : [];
+  jobs.push({ id:'j_'+Date.now().toString(36), type:'apply-edits', chapter:ch, comment_ids:[nc.id], from_advisor:{ id:advisorId, cid:c.id }, status:'queued', requested_ts:new Date().toISOString() });
+  await putJson(t, 'jobs.json', jobs, jr.sha, `review: queue advisor comment ${c.id}`);
+  await _mutateAdvisorComment(advisorId, ch, c.id, x => { x.sent = true; x.read = true; }, `sent: ${advisorId} ${ch} ${c.id}`);
 }
 window.addEventListener('keydown', e => {
   const pop = document.getElementById('pop');
