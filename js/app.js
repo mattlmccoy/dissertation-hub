@@ -154,8 +154,10 @@ async function loadAdvisorComments(ch){
       (json?.comments||[]).forEach(c => { if (c.status!=='resolved') advisorComments.push({ ...c, _advisor:a }); });
     } catch(e){}
   }
+  if (!dev){ const t = tok(); if (t){ try { advNotesState = await loadAdvisorNotes(t); } catch(e){ advNotesState = { notes:{}, sha:null }; } } }
   if (current === ch){ renderComments(); paintHighlights(); }
 }
+let advNotesState = { notes:{}, sha:null };   // owner-private notes, shared by the rail + panel
 // ---------- clickable cross-references (Figure / Table / Section / Chapter N.M) ----------
 const chapterByNum = n => CHAPTERS.find(c => c.n === n);
 function sectionNumberMap(doc){
@@ -613,31 +615,66 @@ function renderAdvisorSection(pane){
   const lbl = document.createElement('div'); lbl.className = 'lbl adv-lbl';
   lbl.innerHTML = `<i class="ti ti-users" style="margin-right:5px"></i>FROM ADVISORS<span style="margin-left:auto">${advisorComments.length}</span>`;
   pane.appendChild(lbl);
-  advisorComments.forEach(c => {
-    const card = document.createElement('div'); card.className = 'ccard adv'; card.dataset.aid = c.id;
-    card.innerHTML = `<div class="row">
-        <span class="chip advchip"><i class="ti ti-user" style="font-size:11px;margin-right:3px"></i>${escapeHtml(whoLabel(c))}</span>
-        ${c.tag&&c.tag!=='other'?`<span class="chip" style="margin-left:5px">${c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:10px;margin-right:2px"></i>':''}${escapeHtml(c.tag)}</span>`:''}
-        ${c.status==='submitted'?'<span class="status" style="margin-left:auto;background:var(--success-bg);color:var(--success)">submitted</span>':''}</div>
-      <div class="snip">"${escapeHtml((c.anchor?.quote||'').slice(0,52))}"${c.created_ts?`<span class="cmeta"> · ${fmtDate(c.created_ts)}</span>`:''}</div>
-      <div class="body">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}${fupHtml(c)}
-      <div class="advacts"><button class="btn aj" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-arrow-right"></i>Jump</button><button class="btn ar" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-message-check"></i>${c.resolution?'Update reply':'Mark addressed'}</button></div>
-      <div class="rform" style="display:none">
-        <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
-        <textarea class="r-note" rows="2" placeholder="How it was handled — the advisor sees this…">${escapeHtml(c.resolution?.note||'')}</textarea>
-        <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-primary r-save" style="padding:4px 10px;font-size:11.5px">Save to advisor</button><span class="r-stat" style="font-size:11px;color:var(--text-3)"></span></div></div>`;
-    card.onmouseenter = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.add('cmark-hot');
-    card.onmouseleave = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.remove('cmark-hot');
-    card.querySelector('.snip').onclick = () => jumpToAdvisor(c);
-    card.querySelector('.aj').onclick = () => jumpToAdvisor(c);
-    const form = card.querySelector('.rform');
-    card.querySelector('.ar').onclick = () => { form.style.display = form.style.display==='none'?'block':'none'; };
-    card.querySelector('.r-save').onclick = async () => { const stat = card.querySelector('.r-stat'); stat.textContent = 'Saving…';
-      const resolution = { state:card.querySelector('.r-state').value, note:card.querySelector('.r-note').value.trim(), ts:new Date().toISOString() };
-      try { await recordResolution(c._advisor, current, c.id, resolution); c.resolution = resolution; stat.textContent = 'Saved — visible to the advisor.'; setTimeout(()=>renderComments(),600); }
-      catch(e){ stat.textContent = 'Failed: ' + e.message; } };
-    pane.appendChild(card);
-  });
+  advisorComments.forEach(c => pane.appendChild(buildAdvCard(c)));
+}
+// build one in-context advisor card with the full action set (rail is the primary action surface)
+function buildAdvCard(c){
+  const card = document.createElement('div'); card.className = 'ccard adv' + (c.read?' is-read':''); card.dataset.aid = c.id;
+  const notes = (advNotesState.notes[c.id]||[]);
+  card.innerHTML = `<div class="row">
+      <label class="rel-read"><input type="checkbox" class="adv-readbox" ${c.read?'checked':''}>read</label>
+      <span class="chip advchip"><i class="ti ti-user" style="font-size:11px;margin-right:3px"></i>${escapeHtml(whoLabel(c))}</span>
+      ${c.tag&&c.tag!=='other'?`<span class="chip" style="margin-left:5px">${c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:10px;margin-right:2px"></i>':''}${escapeHtml(c.tag)}</span>`:''}
+      ${c.sent?'<span class="status" style="margin-left:auto;background:var(--info-bg);color:var(--info)">sent</span>':c.status==='submitted'?'<span class="status" style="margin-left:auto;background:var(--success-bg);color:var(--success)">submitted</span>':''}</div>
+    <div class="snip">"${escapeHtml((c.anchor?.quote||'').slice(0,52))}"${c.created_ts?`<span class="cmeta"> · ${fmtDate(c.created_ts)}</span>`:''}</div>
+    <div class="body">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}${threadHtml(c)}
+    ${notes.map(n=>`<div class="rel-note"><i class="ti ti-lock" style="font-size:12px"></i> ${escapeHtml(n.text)} <span style="color:var(--text-3);font-size:11px">· private · ${fmtDate(n.ts)}</span></div>`).join('')}
+    <div class="advacts">
+      <button class="btn aj"><i class="ti ti-arrow-right"></i>Jump</button>
+      <button class="btn a-reply"><i class="ti ti-message"></i>Reply</button>
+      <button class="btn a-note"><i class="ti ti-note"></i>Private note</button>
+      <button class="btn a-suggest"><i class="ti ti-pencil"></i>Suggest edit</button>
+      <button class="btn a-rec"><i class="ti ti-message-check"></i>${c.resolution?'Update':'Resolution'}</button>
+      <button class="btn a-send" ${(!c.read||c.sent)?`disabled title="${c.sent?'Already sent':'Mark this read first'}"`:''}><i class="ti ti-send"></i>${c.sent?'Sent':'Send to Claude'}</button></div>
+    <div class="rel-pop a-replybox" style="display:none"><textarea rows="2" placeholder="Reply to ${escapeHtml(whoLabel(c))} — they'll see this…"></textarea><div class="rel-popacts"><button class="btn btn-primary a-reply-save">Send reply</button><button class="btn a-x">Cancel</button></div></div>
+    <div class="rel-pop a-notebox" style="display:none"><textarea rows="2" placeholder="Private note — only you see this…"></textarea><div class="rel-popacts"><button class="btn btn-primary a-note-save">Save note</button><button class="btn a-x">Cancel</button></div></div>
+    <div class="rel-pop a-suggestbox" style="display:none"><div class="sug-passage">Editing this passage:<blockquote>"${escapeHtml(c.anchor?.quote||'')}"</blockquote><button class="btn a-jump2" style="padding:2px 8px;font-size:11px"><i class="ti ti-arrow-right"></i>Read it in context</button></div>
+      <select class="a-sug-op">${['replace','insert','delete'].map(o=>`<option value="${o}"${c.edit?.op===o?' selected':(o==='replace'&&!c.edit?' selected':'')}>${o==='replace'?'Replace with':o==='insert'?'Insert after':'Delete'}</option>`).join('')}</select>
+      <textarea class="a-sug-find" rows="2" placeholder="Exact text to find (verbatim)…">${escapeHtml(c.edit?.find ?? c.anchor?.quote ?? '')}</textarea>
+      <textarea class="a-sug-repl" rows="2" placeholder="Your replacement / insertion text…">${escapeHtml(c.edit?.replacement||'')}</textarea>
+      <div class="rel-popacts"><button class="btn btn-primary a-sug-save">Attach edit</button><button class="btn a-x">Cancel</button></div></div>
+    <div class="rform" style="display:none">
+      <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
+      <textarea class="r-note" rows="2" placeholder="How it was handled — the advisor sees this…">${escapeHtml(c.resolution?.note||'')}</textarea>
+      <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-primary r-save" style="padding:4px 10px;font-size:11.5px">Save to advisor</button><span class="r-stat" style="font-size:11px;color:var(--text-3)"></span></div></div>`;
+  card.onmouseenter = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.add('cmark-hot');
+  card.onmouseleave = () => document.querySelector(`#doc .cmark[data-aid="${c.id}"]`)?.classList.remove('cmark-hot');
+  const swap = () => { const fresh = buildAdvCard(c); card.replaceWith(fresh); };   // in-place re-render, no re-fetch
+  const toggle = sel => { const box = card.querySelector(sel); card.querySelectorAll('.rel-pop, .rform').forEach(p => { if (p !== box) p.style.display = 'none'; }); box.style.display = box.style.display==='none'?'block':'none'; if (box.style.display==='block') box.querySelector('textarea')?.focus(); };
+  card.querySelectorAll('.a-x').forEach(x => x.onclick = () => card.querySelectorAll('.rel-pop, .rform').forEach(p => p.style.display = 'none'));
+  card.querySelector('.snip').onclick = () => jumpToAdvisor(c);
+  card.querySelector('.aj').onclick = () => jumpToAdvisor(c);
+  card.querySelector('.a-jump2').onclick = () => jumpToAdvisor(c);
+  card.querySelector('.adv-readbox').onchange = async e => { const v = e.target.checked; try { await markAdvisorRead(c._advisor, current, c.id, v); c.read = v; swap(); } catch(err){ alert('Failed: ' + err.message); e.target.checked = !v; } };
+  card.querySelector('.a-reply').onclick = () => toggle('.a-replybox');
+  card.querySelector('.a-note').onclick = () => toggle('.a-notebox');
+  card.querySelector('.a-suggest').onclick = () => toggle('.a-suggestbox');
+  card.querySelector('.a-rec').onclick = () => toggle('.rform');
+  card.querySelector('.a-reply-save').onclick = async () => { const txt = card.querySelector('.a-replybox textarea').value.trim(); if (!txt) return;
+    try { await replyToAdvisorComment(c._advisor, current, c.id, txt); c.thread = [...(c.thread||[]), { author:'author', text:txt, ts:new Date().toISOString() }]; c.read = true; swap(); } catch(e){ alert('Failed: ' + e.message); } };
+  card.querySelector('.a-note-save').onclick = async () => { const txt = card.querySelector('.a-notebox textarea').value.trim(); if (!txt) return;
+    try { await savePrivateNote(advNotesState, c.id, txt); swap(); } catch(e){ alert('Failed: ' + e.message); } };
+  card.querySelector('.a-sug-save').onclick = async () => { const op = card.querySelector('.a-sug-op').value, find = card.querySelector('.a-sug-find').value.trim(), replacement = card.querySelector('.a-sug-repl').value.trim();
+    if (!find && op !== 'insert'){ alert('Enter the text to find.'); return; }
+    try { const edit = { op, find, replacement }; await suggestAdvisorEdit(c._advisor, current, c.id, edit); c.edit = edit; c.read = true; swap(); } catch(e){ alert('Failed: ' + e.message); } };
+  card.querySelector('.a-send').onclick = async () => { if (!confirm('Send this comment to Claude to address?')) return;
+    const b = card.querySelector('.a-send'); b.disabled = true; b.textContent = 'Sending…';
+    try { await sendAdvisorToClaude(c._advisor, current, c); c.sent = true; c.read = true; swap(); } catch(e){ b.textContent = 'Failed: ' + e.message; } };
+  card.querySelector('.r-save').onclick = async () => { const stat = card.querySelector('.r-stat'); stat.textContent = 'Saving…';
+    const resolution = { state:card.querySelector('.r-state').value, note:card.querySelector('.r-note').value.trim(), ts:new Date().toISOString() };
+    try { await recordResolution(c._advisor, current, c.id, resolution); c.resolution = resolution; c.read = true; stat.textContent = 'Saved — visible to the advisor.'; setTimeout(swap, 600); }
+    catch(e){ stat.textContent = 'Failed: ' + e.message; } };
+  return card;
 }
 function jumpToAdvisor(c){
   const mark = document.querySelector(`#doc .cmark[data-aid="${c.id}"]`);
@@ -1295,38 +1332,26 @@ async function openReleasePanel(){
     const m = p.match(/^advisor\/([^/]+)\/(.+)\.json$/); const id = m[1], ch = m[2];
     try { const r = await getJson(t, p); (r.json?.comments||[]).forEach(c => (inbox[id] = inbox[id]||[]).push({ chapter:ch, c })); } catch(e){}
   }));
-  const notesState = await loadAdvisorNotes(t);   // owner-private notes, keyed by comment id
   const idLabel = id => ADVISOR_NAME[id] || (/^general-/.test(id) ? (inbox[id]?.[0]?.c.author || 'Lab reviewer') : (rel[id]?.name || id));
   // inbox sections: named advisors first, then per-person lab reviewers
   const inboxIds = Object.keys(inbox).sort((a,b) => (/^general-/.test(a)?1:0) - (/^general-/.test(b)?1:0) || idLabel(a).localeCompare(idLabel(b)));
   const rows = CHAPTERS.map(c => `<tr><td>${c.n}. ${escapeHtml(shortTitle(c.title))}</td>${advs.map(a => `<td style="text-align:center"><input type="checkbox" data-a="${a}" data-ch="${c.id}" ${(rel[a].released||[]).includes(c.id)?'checked':''}></td>`).join('')}</tr>`).join('');
   const unreadOf = a => (inbox[a]||[]).filter(({c}) => !c.read && c.status==='submitted').length;
+  const advHeadHtml = a => { const unread = unreadOf(a); return `${unread?`<span class="chip" style="background:var(--warn-bg);color:var(--warn)">${unread} unread</span> <button class="btn rel-readall" data-a="${a}" style="padding:2px 9px;font-size:11.5px"><i class="ti ti-checks"></i>Mark all read</button>`:`<span class="chip" style="background:var(--success-bg);color:var(--success)"><i class="ti ti-check" style="font-size:12px"></i> all read</span>`}`; };
+  const cmtRow = (a, chapter, c) => `<div class="rel-row${c.read?' is-read':''}" data-a="${a}" data-ch="${chapter}" data-cid="${c.id}" data-q="${escapeHtml((c.anchor?.quote||'').slice(0,60))}">
+      <label class="rel-read"><input type="checkbox" class="rel-readbox" ${c.read?'checked':''}></label>
+      <div class="rel-row-main">
+        <div class="rel-row-h">${escapeHtml(chMeta(chapter).n+'')}. ${escapeHtml(shortTitle(chMeta(chapter).title))} · ${escapeHtml(c.anchor?.section||'')}${c.created_ts?` · ${fmtDate(c.created_ts)}`:''}${c.sent?'<span class="chip" style="background:var(--info-bg);color:var(--info)">sent</span>':c.resolution?'<span class="chip" style="background:var(--success-bg);color:var(--success)">resolved</span>':c.status==='submitted'?'<span class="chip" style="background:var(--success-bg);color:var(--success)">submitted</span>':''}${c.reopened?'<span class="chip" style="background:var(--warn-bg);color:var(--warn)">re-opened</span>':''}</div>
+        <div class="rel-row-q">"${escapeHtml((c.anchor?.quote||'').slice(0,64))}" — ${escapeHtml((c.body||'').slice(0,64))}</div>
+      </div>
+      <button class="btn rel-open"><i class="ti ti-arrow-right"></i>Open in context</button></div>`;
   const inboxHtml = (inboxIds.length ? inboxIds : []).map(a => {
     const items = inbox[a]||[]; const unread = unreadOf(a);
-    return `<div class="rel-inbox"><div class="rel-inbox-h"><b>${escapeHtml(idLabel(a))}</b>${/^general-/.test(a)?'<span class="chip" style="margin-left:5px">lab</span>':''}<span class="chip" style="background:var(--accent-bg);color:var(--accent)">${items.length} comment${items.length!==1?'s':''}</span>
-        ${unread?`<span class="chip" style="background:var(--warn-bg);color:var(--warn);margin-left:auto">${unread} unread</span><button class="btn rel-readall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px"><i class="ti ti-checks"></i>Mark all read</button>`:`<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:auto"><i class="ti ti-check" style="font-size:12px"></i> all read</span>`}
-        <button class="btn rel-sendall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px" ${unread?'disabled title="Read every comment from this reviewer first"':''}><i class="ti ti-send"></i>Send unsent to Claude</button></div>${
-      items.length ? items.map(({chapter, c}) => `<div class="rel-cmt${c.read?' is-read':''}" data-ch="${chapter}" data-a="${a}" data-cid="${c.id}" data-q="${escapeHtml((c.anchor?.quote||'').slice(0,60))}">
-          <div class="rel-cmt-h"><label class="rel-read"><input type="checkbox" class="rel-readbox" ${c.read?'checked':''}>read</label> ${escapeHtml(chMeta(chapter).n+'')}. ${escapeHtml(shortTitle(chMeta(chapter).title))} · ${escapeHtml(c.anchor?.section||'')}${c.created_ts?` · <span style="color:var(--text-3)">${fmtDate(c.created_ts)}</span>`:''} ${c.sent?'<span class="chip" style="background:var(--info-bg);color:var(--info);margin-left:6px">sent to Claude</span>':c.status==='submitted'?'<span class="chip" style="background:var(--success-bg);color:var(--success);margin-left:6px">submitted</span>':c.status==='resolved'?'<span class="chip" style="margin-left:6px">withdrawn</span>':''}${c.reopened?'<span class="chip" style="background:var(--warn-bg);color:var(--warn);margin-left:6px">re-opened</span>':''}</div>
-          <div class="rel-cmt-q">"${escapeHtml((c.anchor?.quote||'').slice(0,90))}"</div>
-          <div class="rel-cmt-b">${escapeHtml(c.body||'')}</div>${c.edit?`<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${c.edit.op}</div>${c.edit.op==='delete'?`<del>${escapeHtml(c.edit.find||'')}</del>`:`<del>${escapeHtml(c.edit.find||'')}</del> <ins>${escapeHtml(c.edit.replacement||'')}</ins>`}</div>`:''}
-          ${resolHtml(c)}${fupHtml(c)}${threadHtml(c)}
-          ${(notesState.notes[c.id]||[]).map(n=>`<div class="rel-note"><i class="ti ti-lock" style="font-size:12px"></i> ${escapeHtml(n.text)} <span style="color:var(--text-3);font-size:11px">· private · ${fmtDate(n.ts)}</span></div>`).join('')}
-          <div class="rel-acts">
-            <button class="btn rel-open"><i class="ti ti-arrow-right"></i>Open in context</button>
-            <button class="btn rel-reply"><i class="ti ti-message"></i>Reply</button>
-            <button class="btn rel-note"><i class="ti ti-note"></i>Private note</button>
-            <button class="btn rel-suggest"><i class="ti ti-pencil"></i>Suggest edit</button>
-            <button class="btn rel-rec"><i class="ti ti-message-check"></i>${c.resolution?'Update':'Record'} resolution</button>
-            <button class="btn rel-send" ${(!c.read||c.sent)?`disabled title="${c.sent?'Already sent':'Mark this read first'}"`:''}><i class="ti ti-send"></i>${c.sent?'Sent':'Send to Claude'}</button></div>
-          <div class="rel-replybox rel-pop" style="display:none"><textarea rows="2" placeholder="Reply to the reviewer — they'll see this on their portal…"></textarea><div class="rel-popacts"><button class="btn btn-primary rel-reply-save">Send reply</button><button class="btn rel-x">Cancel</button></div></div>
-          <div class="rel-notebox rel-pop" style="display:none"><textarea rows="2" placeholder="Private note — only you see this (e.g. how/when to process)…"></textarea><div class="rel-popacts"><button class="btn btn-primary rel-note-save">Save note</button><button class="btn rel-x">Cancel</button></div></div>
-          <div class="rel-suggestbox rel-pop" style="display:none"><select class="rel-sug-op">${['replace','insert','delete'].map(o=>`<option value="${o}"${c.edit?.op===o?' selected':''}>${o==='replace'?'Replace':o==='insert'?'Insert after':'Delete'}</option>`).join('')}</select><textarea class="rel-sug-find" rows="2" placeholder="Exact text to find (verbatim)…">${escapeHtml(c.edit?.find||'')}</textarea><textarea class="rel-sug-repl" rows="2" placeholder="Replacement / insertion text…">${escapeHtml(c.edit?.replacement||'')}</textarea><div class="rel-popacts"><button class="btn btn-primary rel-sug-save">Attach edit</button><button class="btn rel-x">Cancel</button></div></div>
-          <div class="rform" style="display:none">
-            <select class="r-state"><option value="addressed"${c.resolution?.state==='addressed'?' selected':''}>Addressed — changed as suggested</option><option value="declined"${c.resolution?.state==='declined'?' selected':''}>Kept as written</option><option value="noted"${c.resolution?.state==='noted'?' selected':''}>Noted</option></select>
-            <textarea class="r-note" rows="2" placeholder="How it was handled — the advisor sees this, keep it plain and reviewer-facing…">${escapeHtml(c.resolution?.note||'')}</textarea>
-            <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-primary r-save" style="padding:4px 11px;font-size:12px">Save to advisor</button><span class="r-stat" style="font-size:11px;color:var(--text-3)"></span></div></div></div>`).join('')
-        : `<div style="font-size:12.5px;color:var(--text-3);padding:6px 2px">No comments submitted yet.</div>` }</div>`;
+    return `<div class="rel-inbox" data-adv="${a}"><div class="rel-inbox-h"><b>${escapeHtml(idLabel(a))}</b>${/^general-/.test(a)?'<span class="chip" style="margin-left:5px">lab</span>':''}<span class="chip" style="background:var(--accent-bg);color:var(--accent)">${items.length} comment${items.length!==1?'s':''}</span>
+        <span class="rel-unread" style="margin-left:auto">${advHeadHtml(a)}</span>
+        <button class="btn rel-sendall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px" ${unread?'disabled title="Read every comment from this reviewer first"':''}><i class="ti ti-send"></i>Send unsent</button></div>
+        <div style="font-size:11.5px;color:var(--text-3);margin:-1px 0 8px">Reply, suggest edits, and send to Claude from the comment itself — click <b>Open in context</b>.</div>${
+      items.length ? items.map(({chapter, c}) => cmtRow(a, chapter, c)).join('') : `<div style="font-size:12.5px;color:var(--text-3);padding:6px 2px">No comments submitted yet.</div>` }</div>`;
   }).join('');
   document.getElementById('rel-body').innerHTML = `
     <div class="rel-sec">Which chapters each advisor can see</div>
@@ -1335,59 +1360,41 @@ async function openReleasePanel(){
     <div class="rel-links">${advs.map(a => `<div><b>${escapeHtml(rel[a].name||a)}</b> → <code>${escapeHtml(base + (a==='general'?'review-lab.html':a+'.html'))}</code></div>`).join('')}</div>
     <div class="rel-sec" style="margin-top:26px">Comments received from advisors</div>${inboxHtml}`;
   const refresh = () => openReleasePanel();
-  // per-advisor: mark all read + send-unsent batch
-  document.querySelectorAll('.rel-readall').forEach(b => b.onclick = async () => {
-    b.disabled = true; b.textContent = 'Marking…';
-    const a = b.dataset.a;
-    try { for (const {chapter, c} of (inbox[a]||[])) if (!c.read) await markAdvisorRead(a, chapter, c.id); refresh(); }
-    catch(e){ b.textContent = 'Failed'; }
-  });
-  document.querySelectorAll('.rel-sendall').forEach(b => b.onclick = async () => {
-    const a = b.dataset.a; const todo = (inbox[a]||[]).filter(({c}) => c.read && !c.sent && c.status==='submitted');
-    if (!todo.length){ b.textContent = 'Nothing to send'; return; }
-    if (!confirm(`Send ${todo.length} comment${todo.length!==1?'s':''} from ${idLabel(a)} to Claude?`)) return;
-    b.disabled = true; b.textContent = 'Sending…';
-    try { for (const {chapter, c} of todo) await sendAdvisorToClaude(a, chapter, c); refresh(); }
-    catch(e){ b.textContent = 'Failed: ' + e.message; }
-  });
-  document.querySelectorAll('.rel-cmt').forEach(el => {
+  // panel is overview-only: read-gate + batch send + open-in-context. All in-place (no full re-fetch).
+  const syncAdvHeader = a => {
+    const box = document.querySelector(`.rel-inbox[data-adv="${a}"]`); if (!box) return;
+    const unread = unreadOf(a);
+    box.querySelector('.rel-unread').innerHTML = advHeadHtml(a);
+    const send = box.querySelector('.rel-sendall'); send.disabled = unread > 0; send.title = unread > 0 ? 'Read every comment from this reviewer first' : '';
+    wireHeader(box, a);
+  };
+  function wireHeader(box, a){
+    const ra = box.querySelector('.rel-readall'); if (ra) ra.onclick = async () => {
+      ra.disabled = true; ra.textContent = 'Marking…';
+      try { for (const {chapter, c} of (inbox[a]||[])) if (!c.read){ await markAdvisorRead(a, chapter, c.id); c.read = true; }
+        box.querySelectorAll('.rel-row').forEach(r => { r.classList.add('is-read'); const cb = r.querySelector('.rel-readbox'); if (cb) cb.checked = true; }); syncAdvHeader(a); }
+      catch(e){ ra.textContent = 'Failed'; }
+    };
+    const sa = box.querySelector('.rel-sendall'); sa.onclick = async () => {
+      const todo = (inbox[a]||[]).filter(({c}) => c.read && !c.sent && c.status==='submitted');
+      if (!todo.length){ sa.textContent = 'Nothing to send'; return; }
+      if (!confirm(`Send ${todo.length} comment${todo.length!==1?'s':''} from ${idLabel(a)} to Claude?`)) return;
+      sa.disabled = true; sa.textContent = 'Sending…';
+      try { for (const {chapter, c} of todo){ await sendAdvisorToClaude(a, chapter, c); c.sent = true; } refresh(); }
+      catch(e){ sa.textContent = 'Failed: ' + e.message; }
+    };
+  }
+  document.querySelectorAll('.rel-inbox').forEach(box => wireHeader(box, box.dataset.adv));
+  document.querySelectorAll('.rel-row').forEach(el => {
     const a = el.dataset.a, ch = el.dataset.ch, cid = el.dataset.cid;
-    const card = (inbox[a]||[]).find(x => x.c.id === cid)?.c || {};
-    const toggle = sel => { const box = el.querySelector(sel); el.querySelectorAll('.rel-pop').forEach(p => { if (p !== box) p.style.display = 'none'; }); box.style.display = box.style.display === 'none' ? 'block' : 'none'; if (box.style.display === 'block') box.querySelector('textarea')?.focus(); };
-    el.querySelectorAll('.rel-x').forEach(x => x.onclick = () => el.querySelectorAll('.rel-pop, .rform').forEach(p => p.style.display = 'none'));
     el.querySelector('.rel-open').onclick = () => {
       const q = el.dataset.q;
       enterChapter(ch); setTimeout(() => { const tg = [...document.querySelectorAll('#doc p, #doc li, #doc figcaption')].find(p => p.textContent.replace(/\s+/g,' ').includes(q.slice(0,40))); if (tg){ tg.scrollIntoView({behavior:'smooth',block:'center'}); tg.classList.add('flash'); setTimeout(()=>tg.classList.remove('flash'),1500); } }, 1900);
     };
-    el.querySelector('.rel-readbox').onchange = async e => { try { await markAdvisorRead(a, ch, cid, e.target.checked); refresh(); } catch(err){ alert('Failed: ' + err.message); } };
-    el.querySelector('.rel-reply').onclick = () => toggle('.rel-replybox');
-    el.querySelector('.rel-note').onclick = () => toggle('.rel-notebox');
-    el.querySelector('.rel-suggest').onclick = () => toggle('.rel-suggestbox');
-    el.querySelector('.rel-reply-save').onclick = async () => {
-      const txt = el.querySelector('.rel-replybox textarea').value.trim(); if (!txt) return;
-      try { await replyToAdvisorComment(a, ch, cid, txt); refresh(); } catch(e){ alert('Failed: ' + e.message); }
-    };
-    el.querySelector('.rel-note-save').onclick = async () => {
-      const txt = el.querySelector('.rel-notebox textarea').value.trim(); if (!txt) return;
-      try { await savePrivateNote(notesState, cid, txt); refresh(); } catch(e){ alert('Failed: ' + e.message); }
-    };
-    el.querySelector('.rel-sug-save').onclick = async () => {
-      const op = el.querySelector('.rel-sug-op').value, find = el.querySelector('.rel-sug-find').value.trim(), replacement = el.querySelector('.rel-sug-repl').value.trim();
-      if (!find && op !== 'insert'){ alert('Enter the text to find.'); return; }
-      try { await suggestAdvisorEdit(a, ch, cid, { op, find, replacement }); refresh(); } catch(e){ alert('Failed: ' + e.message); }
-    };
-    el.querySelector('.rel-send').onclick = async () => {
-      if (!confirm('Send this comment to Claude to address?')) return;
-      const b = el.querySelector('.rel-send'); b.disabled = true; b.textContent = 'Sending…';
-      try { await sendAdvisorToClaude(a, ch, card); refresh(); } catch(e){ b.textContent = 'Failed: ' + e.message; }
-    };
-    const form = el.querySelector('.rform');
-    el.querySelector('.rel-rec').onclick = () => { form.style.display = form.style.display === 'none' ? 'block' : 'none'; };
-    el.querySelector('.r-save').onclick = async () => {
-      const stat = el.querySelector('.r-stat'); stat.textContent = 'Saving…';
-      const resolution = { state: el.querySelector('.r-state').value, note: el.querySelector('.r-note').value.trim(), ts: new Date().toISOString() };
-      try { await recordResolution(a, ch, cid, resolution); stat.textContent = 'Saved — the advisor will see this.'; setTimeout(refresh, 700); }
-      catch(e){ stat.textContent = 'Failed: ' + e.message; }
+    el.querySelector('.rel-readbox').onchange = async e => {
+      const v = e.target.checked; const item = (inbox[a]||[]).find(x => x.c.id === cid);
+      try { await markAdvisorRead(a, ch, cid, v); if (item) item.c.read = v; el.classList.toggle('is-read', v); syncAdvHeader(a); }
+      catch(err){ alert('Failed: ' + err.message); e.target.checked = !v; }
     };
   });
   document.getElementById('rel-save').onclick = async () => {
