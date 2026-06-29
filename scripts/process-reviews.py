@@ -209,9 +209,19 @@ def cmd_stage(a):
 def _push_data(a, msg):
     sh(["git", "add", "-A"], a.data)
     sh(["git", "commit", "-m", msg], a.data, check=False)
-    push = subprocess.run(["git", "push", "origin", "HEAD"], cwd=a.data, capture_output=True, text=True)
-    if push.returncode != 0:
-        print(f"{C['y']}local change written, but push failed — retry `git -C {a.data} push`.{C['x']}")
+    # self-heal on a rejected push: the browser may have committed to the data repo since our last
+    # pull. Rebase onto the remote (our commit replays on top — no lost data) and retry, a few times.
+    for attempt in range(4):
+        push = subprocess.run(["git", "push", "origin", "HEAD"], cwd=a.data, capture_output=True, text=True)
+        if push.returncode == 0:
+            return
+        rb = subprocess.run(["git", "pull", "--rebase", "origin", "HEAD"], cwd=a.data, capture_output=True, text=True)
+        if rb.returncode != 0:
+            subprocess.run(["git", "rebase", "--abort"], cwd=a.data, capture_output=True)
+            print(f"{C['y']}push rejected and auto-rebase hit a conflict — resolve by hand: "
+                  f"git -C {a.data} pull --rebase && git -C {a.data} push.{C['x']}")
+            return
+    print(f"{C['y']}local change written, but push still failing after retries — retry `git -C {a.data} push`.{C['x']}")
 
 
 def cmd_respond(a):
@@ -283,6 +293,7 @@ def cmd_merge(a):
     staged comments 'merged', close any merge job, and delete the branch."""
     ch = a.chapter
     branch = f"review-edits/{ch}"
+    pull(a.data)   # refresh the review/comment files before we flip statuses (avoid a stale-base whole-file write)
     pull(a.diss)
     if not sh(["git", "rev-parse", "--verify", branch], a.diss, check=False) and \
        not sh(["git", "ls-remote", "--heads", "origin", branch], a.diss, check=False):

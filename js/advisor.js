@@ -16,7 +16,28 @@ const deleteComment = (r, id) => ({ ...r, comments:r.comments.filter(c => c.id!=
 const _API='https://api.github.com', _OWNER='mattlmccoy', _REPO='dissertation-tracker-data';
 const _hdr = t => ({ Authorization:`Bearer ${t}`, Accept:'application/vnd.github+json' });
 async function getJson(t, path){ const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}?t=${Date.now()}`,{headers:_hdr(t),cache:'no-store'}); if(r.status===404) return {json:null,sha:null}; if(!r.ok) throw new Error('GitHub '+r.status); const d=await r.json(); if(typeof d.content!=='string'||!d.content.trim()) throw new Error('empty content'); return {json:JSON.parse(decodeURIComponent(escape(atob(d.content.replace(/\s/g,''))))),sha:d.sha}; }
-async function putJson(t, path, obj, sha, msg){ const content=btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2)))); const put=s=>fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content,sha:s||undefined})}); let r=await put(sha); if(r.status===409){ try{ const cur=await getJson(t,path); r=await put(cur.sha); }catch(e){} } if(!r.ok) throw new Error('put failed: '+r.status); return (await r.json()).content.sha; }
+async function putJson(t, path, obj, sha, msg, autoRetry=true){ const content=btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2)))); const put=s=>fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content,sha:s||undefined})}); let r=await put(sha); if(r.status===409&&autoRetry){ try{ const cur=await getJson(t,path); r=await put(cur.sha); }catch(e){} } if(!r.ok) throw new Error('put failed: '+r.status); return (await r.json()).content.sha; }
+// merge two reviews of the SAME reviewer file without losing anything: union comments by id;
+// remote wins owner-authoritative fields, local wins reviewer-authoritative fields; thread merged by (author,ts).
+function mergeReviews(remote, local){
+  const out = { ...(remote||{}), ...(local||{}) };
+  const rById = Object.fromEntries(((remote&&remote.comments)||[]).map(c=>[c.id,c]));
+  const lById = Object.fromEntries(((local&&local.comments)||[]).map(c=>[c.id,c]));
+  const ids = [...new Set([...Object.keys(rById), ...Object.keys(lById)])];
+  out.comments = ids.map(id => {
+    const r = rById[id], l = lById[id];
+    if (r && !l) return r;                 // owner-only (e.g. injected) — keep
+    if (l && !r) return l;                 // new local comment not yet pushed — NEVER drop
+    const thread = [];                     // union threads by (author,ts)
+    const seen = new Set();
+    for (const m of [...(r.thread||[]), ...(l.thread||[])]){ const k = (m.author||'')+'|'+(m.ts||''); if (!seen.has(k)){ seen.add(k); thread.push(m); } }
+    return { ...r,                         // remote base → owner fields (resolution, read, sent, advisor_state, reopened) win
+      body:l.body, edit:l.edit, status:l.status, anchor:l.anchor, kind:l.kind, tag:l.tag, author:l.author, created_ts:l.created_ts||r.created_ts,
+      ...(thread.length?{thread}:{}) };
+  });
+  delete out.pending;                      // pending is a local-only marker, never written to the remote payload
+  return out;
+}
 
 const ADVISOR = window.ADVISOR || { id: '?', name: 'Reviewer' };
 // shared "general/lab" portal: many people use one link, each gets a per-person comment file
@@ -81,10 +102,50 @@ async function syncDown(){ const t = tok(); if (!t) return;
       (json.comments||[]).forEach(rc => { if (!review.comments.find(c=>c.id===rc.id)) review.comments.push(rc); });
       save(); renderComments(); if (document.getElementById('doc')) paintHighlights(); } }
   catch(e){ /* first time / offline */ } }
-function syncUpSoon(){ if (!tok()) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncUp, 1200); }
-async function syncUp(){ const t = tok(); if (!t) return;
-  try { const { sha } = await getJson(t, reviewPath(current)); reviewSha = await putJson(t, reviewPath(current), review, sha || reviewSha, `review(${effId()}): ${current}`); }
-  catch(e){ /* retried next change */ } }
+// a local mutation isn't safe until confirmed on GitHub — flag it, persist, and schedule a push
+function markDirty(){ review.pending = true; markDirty(); renderBanner(); }
+function syncUpSoon(){ if (!tok()) return; clearTimeout(syncTimer); syncTimer = setTimeout(() => syncUp(), 1200); }
+// read-modify-merge push: returns true only when GitHub confirms (2xx). Never clobbers owner edits.
+async function syncUp(){ const t = tok(); if (!t) return false;
+  const path = reviewPath(current), label = effId();
+  for (let attempt = 0; attempt < 5; attempt++){
+    let remote = null, sha = reviewSha;
+    try { const g = await getJson(t, path); remote = g.json; sha = g.sha; }
+    catch(e){ if (is401(e)){ keyBad = true; renderBanner(); return false; } /* 404 = first push */ }
+    const merged = mergeReviews(remote, review);
+    try { reviewSha = await putJson(t, path, merged, sha, `review(${label}): ${current}`, false);
+      merged.pending = false; review = merged; save(); renderBanner(); return true; }
+    catch(e){ if (/\b409\b/.test(e.message) && attempt < 4){ await new Promise(r => setTimeout(r, 250*(attempt+1))); continue; } renderBanner(); return false; }
+  }
+  renderBanner(); return false;
+}
+// ---------- durable outbox: any chapter with unconfirmed local edits gets retried until it lands ----------
+function pendingChapters(){ const out = []; const pre = `adv:${effId()}:`;
+  for (let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if (!k || !k.startsWith(pre)) continue;
+    try { const r = JSON.parse(localStorage.getItem(k) || 'null'); if (r && r.pending) out.push(k.slice(pre.length)); } catch(e){} }
+  return out; }
+async function retryPending(){ const t = tok(); if (!t) return; const chs = pendingChapters(); if (!chs.length) return;
+  for (const ch of chs){
+    if (ch === current){ await syncUp(); continue; }                 // active chapter: merge against the live object
+    const path = `advisor/${effId()}/${ch}.json`; const lk = `adv:${effId()}:${ch}`;
+    let local = null; try { local = JSON.parse(localStorage.getItem(lk) || 'null'); } catch(e){} if (!local) continue;
+    try { let remote = null, sha = null; try { const g = await getJson(t, path); remote = g.json; sha = g.sha; } catch(e){ if (is401(e)){ keyBad = true; break; } }
+      const merged = mergeReviews(remote, local);
+      await putJson(t, path, merged, sha, `review(${effId()}): ${ch} (retry)`, false);
+      merged.pending = false; localStorage.setItem(lk, JSON.stringify(merged)); }
+    catch(e){ /* stays pending; next tick retries */ }
+  }
+  renderBanner();
+}
+function renderBanner(){
+  let el = document.getElementById('syncbanner');
+  const chs = pendingChapters();
+  if (keyBad || !chs.length){ if (el) el.remove(); return; }
+  if (!el){ el = document.createElement('div'); el.id = 'syncbanner'; document.body.appendChild(el); }
+  const n = chs.length;
+  el.innerHTML = `<i class="ti ti-cloud-up"></i><span>${n} chapter${n>1?'s have':' has'} comments not yet saved to the server — keep this browser open.</span><button id="syncretry">Retry now</button>`;
+  el.querySelector('#syncretry').onclick = () => { el.querySelector('#syncretry').textContent = 'Retrying…'; retryPending(); };
+}
 
 // ---------- release gate + content ----------
 async function loadRelease(){
@@ -266,7 +327,7 @@ function showPopover(anchor,rects,defaultTag='wording'){
     else if(mode==='delete') edit={op:'delete',find:anchor.quote,replacement:''};
     if(edit&&mode!=='delete'&&!repl.value.trim()){ flash('Enter the '+(mode==='insert'?'text to insert':'replacement text')+'.'); return; }
     review=addComment(review,{ anchor:pending, kind:edit?'suggestion':pending.kind, tag:edit?'edit':tag, body:body.value, edit, author:authorId() });
-    save(); syncUpSoon(); renderComments(); buildNav(); paintHighlights(); pop.remove(); window.getSelection().removeAllRanges(); };
+    markDirty(); renderComments(); buildNav(); paintHighlights(); pop.remove(); window.getSelection().removeAllRanges(); };
 }
 
 // ---------- comments rail ----------
@@ -308,12 +369,12 @@ function commentAction(id,act){ const c=review.comments.find(x=>x.id===id); if(!
   if(act==='edit'){ editingId=id; renderComments(); return; }
   if(act==='del'){ if(!confirm('Delete this comment?')) return; review=deleteComment(review,id); }
   else if(act==='resolve'){ review=updateComment(review,id,{status: c.status==='resolved'?'open':'resolved'}); }
-  save(); syncUpSoon(); renderComments(); buildNav(); paintHighlights(); }
+  markDirty(); renderComments(); buildNav(); paintHighlights(); }
 function editCard(c){ const w=document.createElement('div');
   w.innerHTML=`<textarea id="ebody" style="width:100%;border:.5px solid var(--accent);border-radius:6px;padding:7px;font:inherit;background:var(--bg);color:var(--text);min-height:54px;outline:none">${escapeHtml(c.body)}</textarea>
     <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary" id="esave" style="padding:5px 13px;font-size:12px">Save</button><button class="btn" id="ecancel" style="padding:5px 13px;font-size:12px">Cancel</button></div>`;
   w.querySelector('#ecancel').onclick=()=>{ editingId=null; renderComments(); };
-  w.querySelector('#esave').onclick=()=>{ review=updateComment(review,c.id,{body:w.querySelector('#ebody').value}); editingId=null; save(); syncUpSoon(); renderComments(); }; return w; }
+  w.querySelector('#esave').onclick=()=>{ review=updateComment(review,c.id,{body:w.querySelector('#ebody').value}); editingId=null; markDirty(); renderComments(); }; return w; }
 function jumpTo(c){ activeId=c.id; const mark=document.querySelector(`#doc .cmark[data-id="${c.id}"], #doc figure[data-cid="${c.id}"]`);
   const q=(c.anchor.quote||'').replace(/\s+/g,' ').trim().slice(0,40); const el=mark||[...document.querySelectorAll('#doc p, #doc li, #doc figure, #doc figcaption, #doc h2, #doc h3')].find(p=>p.textContent.replace(/\s+/g,' ').includes(q));
   if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),1500); } }
@@ -566,16 +627,20 @@ function outlineComment(btn, label, section){
   box.querySelector('.ol-cancel').onclick=()=>box.remove();
   box.querySelector('.ol-save').onclick=()=>{ const v=box.querySelector('textarea').value.trim(); if(!v) return;
     review=addComment(review,{ anchor:{quote:label, section}, kind:'text', tag:'suggestion', body:v, author:authorId() });
-    save(); syncUpSoon(); box.remove();
+    markDirty(); box.remove();
     const n=review.comments.filter(c=>c.anchor?.quote===label && c.anchor?.section===section).length; btn.innerHTML=`<i class="ti ti-message"></i>${n}`;
     renderComments(); flash('Comment added — use Submit comments when finished.'); };
 }
 async function submitComments(){ const t=tok(); if(!t){ flash('Add your access key first.'); return; } const open=review.comments.filter(c=>c.status==='open'); if(!open.length){ flash('No new comments to submit.'); return; }
-  flash('Submitting…'); try{ open.forEach(c=>{ review=updateComment(review,c.id,{status:'submitted'}); }); save(); await syncUp(); renderComments(); flash(`Submitted ${open.length} comment${open.length>1?'s':''}. Thank you!`); }catch(e){ flash('Submit failed — try again.'); } }
+  flash('Submitting…'); open.forEach(c=>{ review=updateComment(review,c.id,{status:'submitted'}); }); review.pending=true; save(); renderComments();
+  const ok = await syncUp();                       // syncUp returns true ONLY when GitHub confirms the write
+  renderBanner();
+  if (ok) flash(`Submitted ${open.length} comment${open.length>1?'s':''}. Thank you!`);
+  else flash(`Saved on this device — not uploaded yet. We'll keep retrying; please keep this browser open and don't clear its data.`, 5200); }
 function runSearch(q){ clearSearch(); if(!q.trim()) return; const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'); let first=null;
   document.querySelectorAll('#doc p').forEach(p=>{ if(re.test(p.textContent)){ p.innerHTML=p.innerHTML.replace(re,m=>`<mark style="background:var(--warn-bg)">${m}</mark>`); if(!first) first=p; } }); if(first) first.scrollIntoView({behavior:'smooth',block:'center'}); }
 function clearSearch(){ document.querySelectorAll('#doc mark:not(.cmark)').forEach(m=>m.replaceWith(...m.childNodes)); }
-function flash(msg){ const t=document.createElement('div'); t.textContent=msg; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.2)'; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function flash(msg, ms=2600){ const t=document.createElement('div'); t.textContent=msg; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.2);max-width:88vw;text-align:center'; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
 
 // ---------- mobile: comments rail as a bottom sheet ----------
 function setupMobileSheet(){
@@ -585,7 +650,17 @@ function setupMobileSheet(){
 }
 // ---------- boot ----------
 async function boot(){ keyBad = false; await loadRelease(); if (keyBad && tok()){ showKeyExpired(); return; }
-  if (SHARED && tok() && !reviewerName()){ showNameEntry(); return; } enterHome(); }
+  if (SHARED && tok() && !reviewerName()){ showNameEntry(); return; } enterHome();
+  startOutbox(); retryPending(); renderBanner(); }
+// outbox heartbeat: retry any unconfirmed local edits on a timer, when the tab regains focus,
+// and when connectivity returns — so a comment written offline still reaches GitHub later.
+let outboxStarted = false;
+function startOutbox(){ if (outboxStarted) return; outboxStarted = true;
+  setInterval(() => { if (navigator.onLine && tok()) retryPending(); }, 30000);
+  window.addEventListener('online', () => retryPending());
+  window.addEventListener('visibilitychange', () => { if (!document.hidden) retryPending(); });
+  window.addEventListener('beforeunload', e => { if (pendingChapters().length){ e.preventDefault(); e.returnValue = ''; } });   // warn before leaving with unsynced work
+}
 function showNameEntry(){
   document.getElementById('nav').style.display = 'none'; document.getElementById('comments').style.display = 'none';
   document.getElementById('topbar').innerHTML = `<strong style="font-size:16px;font-weight:600">Dissertation review</strong>`;

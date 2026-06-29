@@ -1445,14 +1445,22 @@ async function sendAdvisorToClaude(advisorId, ch, c){
   const t = tok();
   const { json, sha } = await getJson(t, `reviews/${ch}.json`).catch(() => ({ json:null, sha:null }));
   let review = json || newReview(ch, '');
-  review = addComment(review, { anchor:c.anchor, kind:c.kind, tag:c.edit?'edit':(c.tag||'wording'), body:c.body, edit:c.edit||null });
-  const nc = review.comments[review.comments.length-1];
-  nc.from_advisor = { id:advisorId, cid:c.id, name: ADVISOR_NAME[advisorId] || c.author || advisorId }; nc.status = 'queued';
-  await putJson(t, `reviews/${ch}.json`, review, sha, `review: incorporate ${advisorId} comment ${c.id}`);
+  // idempotent: if this advisor comment was already copied in (e.g. the jobs.json PUT failed and we're retrying), reuse it
+  let nc = review.comments.find(x => x.from_advisor && x.from_advisor.id === advisorId && x.from_advisor.cid === c.id);
+  if (!nc){
+    review = addComment(review, { anchor:c.anchor, kind:c.kind, tag:c.edit?'edit':(c.tag||'wording'), body:c.body, edit:c.edit||null });
+    nc = review.comments[review.comments.length-1];
+    nc.from_advisor = { id:advisorId, cid:c.id, name: ADVISOR_NAME[advisorId] || c.author || advisorId }; nc.status = 'queued';
+    await putJson(t, `reviews/${ch}.json`, review, sha, `review: incorporate ${advisorId} comment ${c.id}`);
+  }
   const jr = await getJson(t, 'jobs.json').catch(() => ({ json:null, sha:null }));
   const jobs = Array.isArray(jr.json) ? jr.json : [];
-  jobs.push({ id:'j_'+Date.now().toString(36), type:'apply-edits', chapter:ch, comment_ids:[nc.id], from_advisor:{ id:advisorId, cid:c.id }, status:'queued', requested_ts:new Date().toISOString() });
-  await putJson(t, 'jobs.json', jobs, jr.sha, `review: queue advisor comment ${c.id}`);
+  // idempotent: don't double-queue a still-open job for the same advisor comment
+  const dup = jobs.find(j => j.from_advisor && j.from_advisor.id === advisorId && j.from_advisor.cid === c.id && j.status !== 'done' && j.status !== 'merged');
+  if (!dup){
+    jobs.push({ id:'j_'+Date.now().toString(36), type:'apply-edits', chapter:ch, comment_ids:[nc.id], from_advisor:{ id:advisorId, cid:c.id }, status:'queued', requested_ts:new Date().toISOString() });
+    await putJson(t, 'jobs.json', jobs, jr.sha, `review: queue advisor comment ${c.id}`);
+  }
   await _mutateAdvisorComment(advisorId, ch, c.id, x => { x.sent = true; x.read = true; }, `sent: ${advisorId} ${ch} ${c.id}`);
 }
 window.addEventListener('keydown', e => {
