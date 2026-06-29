@@ -1,6 +1,6 @@
 import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js';
 import { anchorFromSelection } from './anchor.js';
-import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl } from './gh.js';
+import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
@@ -1136,26 +1136,64 @@ async function queueExport(scope, formats, opts){
     status:'queued', requested_ts:new Date().toISOString() });
   await putJson(t, 'jobs.json', jobs, sha, `export: queue ${scope} (${formats.join(',')})`);
 }
-// completed exports (job.artifacts) -> a Downloads list; fetch private-repo bytes via the API and save as a blob
+// all export jobs (done + in-flight), newest first — for the home Downloads section
 async function listExports(){
   const t = tok(); if (!t) return [];
   const { json } = await getJson(t, 'jobs.json').catch(() => ({ json:null }));
-  return (Array.isArray(json) ? json : []).filter(j => j.type === 'export' && j.status === 'done' && (j.artifacts||[]).length)
-    .sort((a,b) => (b.done_ts||'').localeCompare(a.done_ts||''));
+  return (Array.isArray(json) ? json : []).filter(j => j.type === 'export')
+    .sort((a,b) => (b.requested_ts||'').localeCompare(a.requested_ts||''));
 }
-async function renderExportDownloads(){
-  const box = document.getElementById('exp-downloads'); if (!box) return;
+const _expOpen = new Set();   // which chapter groups are expanded (persists within the session)
+const FMT_NAME = { docx:'Word', pdf:'PDF', md:'Markdown' };
+// Home Downloads: grouped by chapter, collapsible, versioned, with pending state + delete.
+async function renderHomeDownloads(){
+  const box = document.getElementById('home-downloads'); if (!box) return;
   const jobs = await listExports();
-  if (!jobs.length){ box.innerHTML = `<div style="font-size:12px;color:var(--text-3)">No exports yet.</div>`; return; }
-  const fmtName = { docx:'Word', pdf:'PDF', md:'Markdown' };
-  box.innerHTML = `<div style="font-size:11.5px;color:var(--text-3);margin-bottom:6px">Recent exports</div>` +
-    jobs.slice(0,8).map(j => {
-      const scope = j.chapter === '__all__' ? 'Whole dissertation' : `Ch. ${chMeta(j.chapter).n} · ${escapeHtml(shortTitle(chMeta(j.chapter).title))}`;
-      const when = j.done_ts ? fmtDate(j.done_ts) : '';
-      const links = (j.artifacts||[]).map(art => `<button class="btn exp-dl" data-path="${escapeHtml(art.path)}" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-download"></i>${art.chapter && j.chapter==='__all__' ? escapeHtml(art.chapter)+' · ' : ''}${fmtName[art.fmt]||art.fmt}</button>`).join(' ');
-      return `<div style="padding:7px 0;border-top:.5px solid var(--border)"><div style="font-size:12.5px;font-weight:500">${scope}<span style="color:var(--text-3);font-weight:400"> · ${when}</span></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">${links}</div></div>`;
+  const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="home-allch" style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin:0">DOWNLOADS</div>
+      <button class="btn" id="dl-export-all" style="margin-left:auto;padding:5px 11px;font-size:12px"><i class="ti ti-file-export"></i>Export whole dissertation…</button></div>`;
+  if (!jobs.length){ box.innerHTML = header + `<div style="font-size:12.5px;color:var(--text-3)">No exports yet. Use a chapter's “…” menu → Export, or the button above.</div>`;
+    box.querySelector('#dl-export-all').onclick = () => exportDialog('__all__'); return; }
+  // group by scope (chapter id or __all__)
+  const groups = {};
+  for (const j of jobs){ (groups[j.chapter] ||= []).push(j); }
+  const order = Object.keys(groups).sort((a,b) => (a==='__all__'?99:chMeta(a).n) - (b==='__all__'?99:chMeta(b).n));
+  box.innerHTML = header + order.map(scope => {
+    const list = groups[scope];
+    const name = scope === '__all__' ? 'Whole dissertation' : `Chapter ${chMeta(scope).n} · ${escapeHtml(shortTitle(chMeta(scope).title))}`;
+    const pending = list.filter(j => j.status !== 'done').length;
+    const open = _expOpen.has(scope);
+    const versions = list.map(j => {
+      const when = j.done_ts ? fmtDate(j.done_ts) : (j.requested_ts ? fmtDate(j.requested_ts) : '');
+      if (j.status !== 'done'){
+        const lbl = j.status === 'queued' ? 'queued — building when the executor runs' : (j.status||'building') + '…';
+        return `<div class="dl-ver"><div class="dl-ver-h"><i class="ti ti-clock" style="color:var(--warn)"></i> ${when} <span style="color:var(--warn)">${lbl}</span></div></div>`;
+      }
+      const dls = (j.artifacts||[]).map(art => `<button class="btn dl-get" data-path="${escapeHtml(art.path)}" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-download"></i>${art.chapter && scope==='__all__' ? escapeHtml((chMeta(art.chapter).n||'')+'·') : ''}${FMT_NAME[art.fmt]||art.fmt}</button>`).join(' ');
+      return `<div class="dl-ver"><div class="dl-ver-h">${when}<button class="dl-del" data-job="${escapeHtml(j.id)}" title="Delete this export"><i class="ti ti-trash"></i></button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${dls}</div></div>`;
     }).join('');
-  box.querySelectorAll('.exp-dl').forEach(b => b.onclick = () => downloadArtifact(b.dataset.path));
+    return `<div class="dl-grp"><button class="dl-grp-h" data-scope="${escapeHtml(scope)}"><i class="ti ti-chevron-${open?'down':'right'}"></i><span>${name}</span><span class="dl-count">${list.length} version${list.length>1?'s':''}${pending?` · ${pending} building`:''}</span></button>
+      <div class="dl-grp-body" style="display:${open?'block':'none'}">${versions}</div></div>`;
+  }).join('');
+  box.querySelector('#dl-export-all').onclick = () => exportDialog('__all__');
+  box.querySelectorAll('.dl-grp-h').forEach(h => h.onclick = () => { const s = h.dataset.scope; _expOpen.has(s) ? _expOpen.delete(s) : _expOpen.add(s); renderHomeDownloads(); });
+  box.querySelectorAll('.dl-get').forEach(b => b.onclick = () => downloadArtifact(b.dataset.path));
+  box.querySelectorAll('.dl-del').forEach(b => b.onclick = () => deleteExport(b.dataset.job));
+}
+async function deleteExport(jobId){
+  const t = tok(); if (!t){ flash('Add your access token first.'); return; }
+  const { json, sha } = await getJson(t, 'jobs.json').catch(() => ({ json:null, sha:null }));
+  const jobs = Array.isArray(json) ? json : [];
+  const job = jobs.find(j => j.id === jobId); if (!job) return;
+  if (!confirm(`Delete this export (${(job.artifacts||[]).length} file${(job.artifacts||[]).length!==1?'s':''})? This can't be undone.`)) return;
+  flash('Deleting…');
+  try {
+    for (const art of (job.artifacts||[])) await deleteFile(t, art.path, `export: delete ${art.path}`);
+    const left = jobs.filter(j => j.id !== jobId);
+    await putJson(t, 'jobs.json', left, sha, `export: remove job ${jobId}`);
+    flash('Deleted ✓'); renderHomeDownloads();
+  } catch(e){ flash('Delete failed: ' + e.message); }
 }
 const _SAVE_TYPES = {
   docx: { description:'Word document', accept:{ 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx'] } },
@@ -1215,8 +1253,9 @@ function enterHome(){
   document.getElementById('btn-export').onclick = exportAdvisorResponse;
   document.getElementById('btn-outline').onclick = loadOwnerOutline;
   read.innerHTML = homeHtml();
-  read.querySelectorAll('[data-ch]').forEach(el => el.onclick = () => enterChapter(el.dataset.ch));
+  read.querySelectorAll('.chcard[data-ch], .btn[data-ch]').forEach(el => el.onclick = () => enterChapter(el.dataset.ch));
   refreshInbox();
+  renderHomeDownloads();
 }
 // ---------- proposed outline (read-only view of what advisors see) ----------
 async function loadOwnerOutline(){
@@ -1403,7 +1442,8 @@ function homeHtml(){
       ${cont}
       <div class="home-allch" style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin-bottom:13px">ALL CHAPTERS</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px">${cards}</div>
-      <div id="inbox-panel" class="ibx" style="display:none;margin-top:28px;margin-bottom:0"></div></div>`;
+      <div id="inbox-panel" class="ibx" style="display:none;margin-top:28px;margin-bottom:0"></div>
+      <div id="home-downloads" style="margin-top:36px"></div></div>`;
 }
 
 // ---------- history / version timeline (data repo content commits — readable with the data-repo token) ----------
@@ -1628,13 +1668,7 @@ async function openReleasePanel(){
     <table class="rel-tbl"><thead><tr><th>Chapter</th>${advs.map(a => `<th>${escapeHtml(a)}<div style="font-weight:400;font-size:10px;color:var(--text-3)">${escapeHtml(rel[a].name||a)}</div></th>`).join('')}</tr></thead><tbody>${rows}<tr style="border-top:2px solid var(--border-2)"><td>Release responses<div style="font-weight:400;font-size:10px;color:var(--text-3)">let them see how you addressed their comments</div></td>${advs.map(a => `<td style="text-align:center"><input type="checkbox" data-resp="${a}" ${rel[a].responses_released?'checked':''}></td>`).join('')}</tr></tbody></table>
     <div style="display:flex;gap:8px;margin:14px 0 6px;align-items:center"><button class="btn btn-primary" id="rel-save">Save &amp; publish</button><span id="rel-stat" style="font-size:12px;color:var(--text-3)"></span></div>
     <div class="rel-links">${advs.map(a => `<div><b>${escapeHtml(rel[a].name||a)}</b> → <code>${escapeHtml(base + (a==='general'?'review-lab.html':a+'.html'))}</code></div>`).join('')}</div>
-    <div class="rel-sec" style="margin-top:26px">Export</div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" id="exp-all"><i class="ti ti-file-export"></i>Export whole dissertation…</button>
-      <span style="font-size:12px;color:var(--text-3)">Word · PDF · Markdown, with comments. Per-chapter export lives in each chapter's “…” menu.</span></div>
-    <div id="exp-downloads" style="margin-top:12px"></div>
     <div class="rel-sec" style="margin-top:26px">Comments received from advisors</div>${inboxHtml}`;
-  document.getElementById('exp-all').onclick = () => exportDialog('__all__');
-  renderExportDownloads();
   const refresh = () => openReleasePanel();
   // panel is overview-only: read-gate + batch send + open-in-context. All in-place (no full re-fetch).
   const syncAdvHeader = a => {

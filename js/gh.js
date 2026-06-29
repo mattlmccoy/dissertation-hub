@@ -39,6 +39,14 @@ export async function putFile(tok, path, base64, msg){
   if (!r.ok) throw new Error('github put file failed: '+r.status);
   return (await r.json()).content.sha;
 }
+export async function deleteFile(tok, path, msg){
+  const sha = await getSha(tok, path).catch(() => null);
+  if (!sha) return false;                                  // already gone
+  const r = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}`, { method:'DELETE', headers:hdr(tok),
+    body: JSON.stringify({ message:msg, sha }) });
+  if (!r.ok) throw new Error('github delete failed: '+r.status);
+  return true;
+}
 export async function getDataUrl(tok, path, mime='image/png'){
   const r = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${path}?t=${Date.now()}`, { headers:hdr(tok), cache:'no-store' });
   if (!r.ok) throw new Error('GitHub '+r.status);
