@@ -1198,8 +1198,8 @@ function exportDialog(scope){
       <div style="font-size:12.5px;color:var(--text-3);margin-bottom:14px">Built by the real pipeline (pandoc + LaTeX) with comments and attribution. Runs in the cloud and appears under Downloads when ready.</div>
       <div class="exp-sec">Formats</div>
       <label class="exp-row"><input type="checkbox" class="exp-fmt" value="docx" checked> Word (.docx) — native comments + tracked changes</label>
-      <label class="exp-row"><input type="checkbox" class="exp-fmt" value="pdf"> PDF — typeset + comments annex</label>
-      <label class="exp-row"><input type="checkbox" class="exp-fmt" value="md"> Markdown</label>
+      <label class="exp-row"><input type="checkbox" class="exp-fmt" value="md" checked> Markdown</label>
+      <label class="exp-row"><input type="checkbox" class="exp-fmt" value="pdf"> PDF — typeset + comments annex <span style="color:var(--text-3)">(slower: full LaTeX build)</span></label>
       <div class="exp-sec" style="margin-top:12px">Comments</div>
       <label class="exp-row"><input type="checkbox" id="exp-resolved" checked> Include resolved/answered comments</label>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
