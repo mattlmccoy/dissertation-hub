@@ -285,8 +285,10 @@ span.cqd{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var
 #sendmenu .smi i{font-size:17px;color:var(--text-2);margin-top:1px} #sendmenu .smi-d{font-size:11px;color:var(--text-3)}
 /* in-context direct editor */
 #doc p.editable-p{position:relative}
-.pen-btn{position:absolute;top:-2px;right:-30px;width:24px;height:24px;display:none;align-items:center;justify-content:center;border-radius:6px;color:var(--text-3);background:var(--bg);border:.5px solid var(--border);font-size:13px;cursor:pointer}
-#doc p.editable-p:hover .pen-btn{display:inline-flex} .pen-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.pen-btn{position:absolute;top:-1px;right:-34px;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--text-3);background:var(--bg);border:.5px solid var(--border);font-size:14px;cursor:pointer;opacity:0;transition:opacity .12s}
+.pen-btn::before{content:"";position:absolute;left:-14px;top:-4px;width:14px;height:calc(100% + 8px)}   /* transparent bridge across the margin gap */
+#doc p.editable-p:hover .pen-btn,.pen-btn:hover{opacity:1}
+.pen-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 #doc p.p-staged{background:var(--success-bg);border-radius:4px;box-shadow:0 0 0 4px var(--success-bg)}
 .pedit{margin:0 0 16px} .pedit-ta{width:100%;font:inherit;font-size:16px;line-height:1.7;color:var(--text);background:var(--bg-2);border:1px solid var(--accent);border-radius:8px;padding:11px 13px;outline:none;resize:vertical}
 .pedit-acts{display:flex;align-items:center;gap:8px;margin-top:8px}
