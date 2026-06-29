@@ -617,7 +617,7 @@ function buildCommentCard(c){
         <button class="btn cdec-b ${c.decision==='reject'?'on-reject':''}" data-d="reject"><i class="ti ti-x"></i>Reject</button>
         <button class="btn cdec-b ${c.decision==='revise'?'on-revise':''}" data-d="revise"><i class="ti ti-pencil"></i>Request changes</button>
       </div>
-      <div class="cdec-revform" style="display:none"><textarea class="cdec-revt" rows="2" placeholder="What should change? This re-queues the edit for Claude."></textarea><div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary cdec-revsend" style="padding:4px 11px;font-size:11.5px">Request changes</button><button class="btn cdec-revcancel" style="padding:4px 11px;font-size:11.5px">Cancel</button></div></div>` : ''}
+      <div class="cdec-revform" style="display:none"><textarea class="cdec-revt" rows="2" placeholder="What should change? This re-queues the edit for Claude."></textarea><div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary cdec-revsend" style="padding:4px 11px;font-size:11.5px">Send to Claude</button><button class="btn cdec-revcancel" style="padding:4px 11px;font-size:11.5px">Cancel</button></div></div>` : ''}
       ${c.status === 'approved' ? `<div class="cdec" data-id="${c.id}"><span class="cqd"><i class="ti ti-clock-check"></i>queued for merge</span><button class="btn cunq" data-id="${c.id}"><i class="ti ti-arrow-back-up"></i>Unqueue</button></div>` : ''}
       ${c.claude?.response ? `<div class="cresp"><div class="cresp-h"><i class="ti ti-robot-face"></i>Claude</div>${escapeHtml(c.claude.response)}</div>` : ''}
       ${c.claude?.branch ? `<div class="branch"><i class="ti ti-git-branch"></i>${escapeHtml(c.claude.branch)}</div>` : ''}
@@ -645,7 +645,9 @@ function buildCommentCard(c){
     });
     card.querySelector('.cdec-revsend')?.addEventListener('click', async e => { e.stopPropagation();
       const note = card.querySelector('.cdec-revt').value.trim();
-      try { await recordDecision(c.id, 'revise', note); } catch(err){ alert('Failed: '+err.message); } });
+      if (!note){ card.querySelector('.cdec-revt').focus(); return; }
+      const b = e.currentTarget; b.disabled = true; b.textContent = 'Sending…';
+      try { await requestChanges(c.id, note); } catch(err){ b.disabled = false; b.textContent = 'Send to Claude'; alert('Failed: '+err.message); } });
     card.querySelector('.cdec-revcancel')?.addEventListener('click', e => { e.stopPropagation(); card.querySelector('.cdec-revform').style.display = 'none'; });
     card.querySelector('.cunq')?.addEventListener('click', async e => { e.stopPropagation();
       try { await unqueueComment(c.id); } catch(err){ alert('Failed: '+err.message); } });
@@ -1715,6 +1717,29 @@ async function unqueueComment(id){
     try { await putJson(t, reviewPath(current), json, sha, `review: unqueue ${id}`, false); return; }
     catch(e){ if (/\b409\b/.test(e.message) && attempt < 4){ await new Promise(r=>setTimeout(r,250*(attempt+1))); continue; } throw e; }
   }
+}
+// "Request changes" → send the staged edit back to Claude to redo NOW (not a batched decision):
+// re-open the comment (drop the staged edit), attach the note, and queue a revision job.
+async function requestChanges(id, note){
+  const ts = new Date().toISOString();
+  const cur = review.comments.find(x => x.id === id);
+  const thread = [...((cur && cur.thread) || []), { author:'you', text:note, ts }];
+  review = updateComment(review, id, { status:'queued', staged_edit:undefined, decision:undefined, decision_note:undefined, decision_ts:undefined, thread });
+  save(); renderComments(); refreshStaged();
+  const t = tok(); if (!t){ flash('Saved on this device — add your access token to send it to Claude.'); return; }
+  for (let attempt = 0; attempt < 5; attempt++){               // re-open the comment in the review file (conflict-safe)
+    const { json, sha } = await getJson(t, reviewPath(current)); if (!json) break;
+    const c = (json.comments||[]).find(x => x.id === id); if (!c) break;
+    c.status = 'queued'; delete c.staged_edit; delete c.decision; delete c.decision_note; delete c.decision_ts;
+    if (!(c.thread||[]).some(m => m.author==='you' && m.text===note)) c.thread = [...(c.thread||[]), { author:'you', text:note, ts }];
+    try { await putJson(t, reviewPath(current), json, sha, `review: request changes ${id}`, false); break; }
+    catch(e){ if (/\b409\b/.test(e.message) && attempt < 4){ await new Promise(r=>setTimeout(r,250*(attempt+1))); continue; } throw e; }
+  }
+  const { json:jj, sha:js } = await getJson(t, 'jobs.json').catch(() => ({ json:null, sha:null }));   // queue the revision for Claude
+  const jobs = Array.isArray(jj) ? jj : [];
+  jobs.push({ id:'j_'+Date.now().toString(36), type:'apply-edits', chapter:current, comment_ids:[id], revision:true, revise_note:note, status:'queued', requested_ts:ts });
+  await putJson(t, 'jobs.json', jobs, js, `review: revision request ${id}`);
+  flash('Change request sent to Claude — it’ll come back as a fresh staged edit.');
 }
 const markAdvisorRead = (advisorId, ch, cid, val=true) => _mutateAdvisorComment(advisorId, ch, cid, c => { c.read = val; }, `read: ${advisorId} ${ch} ${cid}`);
 const replyToAdvisorComment = (advisorId, ch, cid, text) => _mutateAdvisorComment(advisorId, ch, cid, c => { c.thread = [...(c.thread||[]), { author:'author', text, ts:new Date().toISOString() }]; c.read = true; }, `reply: ${advisorId} ${ch} ${cid}`);
