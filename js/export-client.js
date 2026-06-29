@@ -23,8 +23,15 @@ async function inlineRuns(node, ctx, images, onMath){
     if (ch.nodeType === 3){ if (ch.textContent) runs.push({ t: ch.textContent, ...ctx }); continue; }
     if (ch.nodeType !== 1) continue;
     const tag = ch.tagName.toLowerCase();
-    if (ch.classList?.contains('katex') || tag === 'math' || ch.querySelector?.('.katex')){
-      const img = await snapMath(ch, images, onMath); if (img) runs.push({ img }); continue;
+    if (ch.classList?.contains('katex') || tag === 'math'){
+      const display = ch.classList?.contains('katex-display') || ch.closest?.('.katex-display, .math.display');
+      if (display){ const img = await snapMath(ch, images, onMath); if (img) runs.push({ img }); }   // rasterize the few block equations
+      else {                                                                                          // inline math -> clean Unicode text (fast, readable)
+        const mm = ch.querySelector?.('.katex-mathml') || ch;
+        const t = (mm.textContent || '').replace(/\s+/g, ' ').trim();
+        if (t) runs.push({ t, ...ctx });
+      }
+      continue;
     }
     if (tag === 'br'){ runs.push({ t: '\n', ...ctx }); continue; }
     const next = { ...ctx };
@@ -70,7 +77,7 @@ function runXml(r, relOffset){
   const sp = (r.t !== norm(r.t) || /\s$|^\s/.test(r.t)) ? ' xml:space="preserve"' : '';
   return `<w:r>${rpr ? `<w:rPr>${rpr}</w:rPr>` : ''}<w:t${sp}>${xml(r.t)}</w:t></w:r>`;
 }
-const paraXml = (runs, style) => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}${runs.map(r => runXml(r)).join('')}</w:p>`;
+const paraXml = (runs, style) => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}${serializeRuns(runs)}</w:p>`;
 
 // split a run array at a character offset; returns new array (does not mutate)
 function splitAt(runs, off){
@@ -82,6 +89,13 @@ function splitAt(runs, off){
   return out;
 }
 const runText = runs => runs.map(r => r.t || '').join('');
+function quoteVariants(quote){   // as-is, minus an injected "Figure 3.1.:" prefix, and the first sentence
+  const out = [], seen = new Set();
+  let s = (quote || '').replace(/^\s*(Figure|Fig\.?|Table)\s*[\d.]+\.?[:\s]+/i, '').replace(/^\s*(Figure|Fig\.?|Table)\s*[\d.]+\.?\s+/i, '');
+  const first = s.split(/(?<=[.!?])\s/)[0];
+  for (const q of [quote, s, first]){ const n = norm(q); if (n.length >= 6 && !seen.has(n)){ seen.add(n); out.push(q); } }
+  return out;
+}
 function locate(runs, quote){            // [startIdx,endIdx) over the run array, by normalized text
   const raw = runText(runs); if (!raw) return null;
   const map = [], chars = [];
@@ -167,28 +181,29 @@ function tableXml(rows){
     + rows.map(r => `<w:tr>${r.map(cell).join('')}</w:tr>`).join('') + `</w:tbl>`;
 }
 
-// ---------- build the .docx ----------
-async function buildDocx(docEl, comments, meta, report){
-  report && report(0.04, 'Loading export engine…');
-  await deps(false);
+// ---------- build the document body + comments (no zip; testable headless) ----------
+export async function buildBody(docEl, comments, report){
   const images = [];
-  const totalMath = docEl.querySelectorAll('.katex').length; let doneMath = 0;
+  const totalMath = docEl.querySelectorAll('.katex-display, .math.display').length; let doneMath = 0;
   const onMath = () => { doneMath++; report && report(0.08 + 0.72 * (doneMath / Math.max(1, totalMath)), `Rendering equations (${doneMath}/${totalMath})…`); };
   report && report(0.08, totalMath ? 'Rendering equations…' : 'Building document…');
   const blocks = await walkBlocks(docEl, images, totalMath ? onMath : null);
   report && report(0.84, 'Building document…');
-  // anchor comments into the paragraph blocks
+  // anchor comments into the paragraph blocks (try cleaned quote variants; never drop a comment)
   const commentEntries = []; const used = new Set();
   (comments || []).forEach((c, i) => {
     const cid = i + 1; const q = c.quote || c.anchor?.quote || '';
-    if (!norm(q)){ return; }
-    for (const b of blocks){
-      if (b.table || used.has(b) || !b.plain) continue;
-      const loc = locate(b.runs, q);
-      if (loc){ b.runs = annotateRuns(b.runs, loc[0], loc[1], cid, c.edit, c.author || 'Reviewer', c.date); used.add(b);
-        commentEntries.push({ cid, c }); return; }
+    let placed = false;
+    for (const qv of quoteVariants(q)){
+      for (const b of blocks){
+        if (b.table || used.has(b) || !b.plain) continue;
+        const loc = locate(b.runs, qv);
+        if (loc){ b.runs = annotateRuns(b.runs, loc[0], loc[1], cid, c.edit, c.author || 'Reviewer', c.date); used.add(b);
+          commentEntries.push({ cid, c }); placed = true; break; }
+      }
+      if (placed) break;
     }
-    commentEntries.push({ cid, c, appendix: true });   // unanchored → appendix
+    if (!placed) commentEntries.push({ cid, c, appendix: true });   // unanchored → appendix (never lost)
   });
   // appendix for unanchored
   const appendix = commentEntries.filter(e => e.appendix);
@@ -209,7 +224,15 @@ async function buildDocx(docEl, comments, meta, report){
   const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<w:document xmlns:w="${WNS}" xmlns:r="${RNS}"><w:body>${bodyXml}`
     + `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  return { docXml, commentsXml, images,
+    anchored: commentEntries.filter(e => !e.appendix).length, appendix: commentEntries.filter(e => e.appendix).length };
+}
 
+// ---------- build the .docx ----------
+async function buildDocx(docEl, comments, meta, report){
+  report && report(0.04, 'Loading export engine…');
+  await deps(false);
+  const { docXml, commentsXml, images } = await buildBody(docEl, comments, report);
   // zip
   const zip = new _JSZip();
   zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
