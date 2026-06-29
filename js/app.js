@@ -705,9 +705,9 @@ function keyWords(s){
     .replace(/^(figure|fig\.?|table|tab\.?|eq\.?|equation)\s*[\d.]+\s*[:.]?\s*/i,'')   // drop a leading "Figure 3.9.:"
     .replace(/\[[^\]]*\]/g,' ').replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(w => w.length>=3);
 }
-function locateAnchor(c){
-  const sel = `#doc .cmark[data-id="${c.id}"], #doc .cmark[data-aid="${c.id}"], #doc .cmark-el[data-cid="${c.id}"], #doc figure[data-cid="${c.id}"]`;
-  const mark = document.querySelector(sel); if (mark) return mark;        // painted highlight wins
+function locateAnchor(c, { allowSection = true } = {}){
+  const sel = `#doc .tc-stage[data-cid="${c.id}"], #doc .cmark[data-id="${c.id}"], #doc .cmark[data-aid="${c.id}"], #doc .cmark-el[data-cid="${c.id}"], #doc figure[data-cid="${c.id}"]`;
+  const mark = document.querySelector(sel); if (mark) return mark;        // painted edit/highlight wins
   const quote = c.anchor?.quote || '';
   const cands = [...document.querySelectorAll('#doc p, #doc li, #doc figure, #doc figcaption, #doc h2, #doc h3, #doc td, #doc blockquote')];
   // 1) contiguous normalized substring, progressively shorter
@@ -735,14 +735,21 @@ function locateAnchor(c){
   return null;
 }
 function jumpToAdvisor(c){
-  const el = locateAnchor(c);
+  let el = editPair(c) ? paintEditDiff(c) : null;          // edit comments: show ~~before~~ after, wherever the text now is
+  if (!el) el = locateAnchor(c, { allowSection:false });
+  if (!el) el = locateAnchor(c, { allowSection:true });
   if (el) scrollFlash(el); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
 }
-// jump after a chapter is still loading: retry the locator until the doc + highlights are ready
+// jump after a chapter is still loading: retry until the doc is ready, then prefer the edit-diff
 function jumpWhenReady(c, tries = 14){
-  const tick = () => { const el = (document.getElementById('doc') ? locateAnchor(c) : null);
-    if (el){ scrollFlash(el); return; }
-    if (tries-- > 0) setTimeout(tick, 280); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.'); };
+  const tick = () => {
+    if (document.getElementById('doc')){
+      let el = editPair(c) ? paintEditDiff(c) : null;
+      if (!el) el = locateAnchor(c, { allowSection: tries <= 1 });       // hold the section fallback until the end
+      if (el){ scrollFlash(el); return; }
+    }
+    if (tries-- > 0) setTimeout(tick, 280); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
+  };
   tick();
 }
 function commentAction(id, act){
@@ -768,7 +775,9 @@ function editCard(c){
 }
 function jumpTo(c){
   activeCommentId = c.id;
-  const el = locateAnchor(c);
+  let el = editPair(c) ? paintEditDiff(c) : null;          // edit comments: show ~~before~~ after, wherever the text now is
+  if (!el) el = locateAnchor(c, { allowSection:false });
+  if (!el) el = locateAnchor(c, { allowSection:true });
   if (el) scrollFlash(el); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
 }
 function activateComment(id){
@@ -823,38 +832,76 @@ function jumpToAdvisorCard(aid){
 }
 // ---------- staged edits: show the pending change in context (before merge) ----------
 function refreshStaged(){ const doc = document.getElementById('doc'); if (!doc) return; renderStagedEdits(doc); showApproveBar(); }
+// length-preserving fold (lowercase + unicode dash/quote/nbsp) so collapsed-index mapping stays valid
+function lite(s){ return (s||'').replace(/ /g,' ').replace(/[‐-―]/g,'-').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').toLowerCase(); }
+// the before/after of a comment's edit, from any of the places one can live
+function editPair(c){
+  const se = c.staged_edit, e = c.edit, r = c.resolution;
+  const before = (se?.before ?? e?.find ?? r?.before ?? '').toString();
+  const after  = (se?.after  ?? e?.replacement ?? r?.after ?? '').toString();
+  return (before.trim() || after.trim()) ? { before: before.trim().replace(/\s+/g,' '), after: after.trim().replace(/\s+/g,' ') } : null;
+}
+// find `text` inside one text node of a candidate block (normalized, whitespace-tolerant) → {node,start,end}
+function findRange(doc, text){
+  if (!text || text.length < 4) return null;
+  const probe = lite(text).replace(/\s+/g,' ').trim().slice(0, 40);
+  for (const el of doc.querySelectorAll('p, li, figcaption, td, blockquote')){
+    if (!lite(el.textContent).replace(/\s+/g,' ').includes(probe)) continue;
+    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let node;
+    while ((node = tw.nextNode())){
+      const collapsed = lite(node.nodeValue).replace(/\s+/g,' ');
+      const i = collapsed.indexOf(probe); if (i < 0) continue;
+      const start = mapCollapsedIndex(node.nodeValue, i);
+      const fullLen = lite(text).replace(/\s+/g,' ').trim().length;
+      const end = Math.min(node.nodeValue.length, mapCollapsedIndex(node.nodeValue, i + fullLen));
+      return { node, start, end };
+    }
+  }
+  return null;
+}
+// remove any previously-painted track-changes nodes for one comment (restore original text)
+function clearEditNodes(cid){
+  document.querySelectorAll(`#doc ins.tc-stage[data-cid="${cid}"]`).forEach(n => n.remove());
+  document.querySelectorAll(`#doc del.tc-stage[data-cid="${cid}"]`).forEach(n => { const p = n.parentNode; n.replaceWith(...n.childNodes); p.normalize(); });
+}
+// paint ~~before~~ after inline for a comment's edit. Works whether the OLD text is still present
+// (anchors on `before`) or already replaced by the NEW text (anchors on `after`). Returns the node to scroll to.
+function paintEditDiff(c){
+  const doc = document.getElementById('doc'); if (!doc) return null;
+  const p = editPair(c); if (!p) return null;
+  clearEditNodes(c.id);
+  const mkDel = () => { const d = document.createElement('del'); d.className = 'tc-stage'; d.dataset.cid = c.id; return d; };
+  const mkIns = (t) => { const n = document.createElement('ins'); n.className = 'tc-stage'; n.dataset.cid = c.id; if (t != null) n.textContent = t; return n; };
+  // case A: old text still in the doc → wrap it as del, append the new as ins
+  let rng = p.before ? findRange(doc, p.before) : null;
+  if (rng){
+    try {
+      const r = document.createRange(); r.setStart(rng.node, rng.start); r.setEnd(rng.node, rng.end);
+      if (p.after && p.after.replace(/\s+/g,' ').startsWith(p.before)){    // pure append
+        const ins = mkIns(p.after.slice(p.before.length)); r.collapse(false); r.insertNode(ins); return ins;
+      }
+      const del = mkDel(); r.surroundContents(del);
+      const ins = mkIns(p.after ? ' ' + p.after : ''); del.after(ins); return p.after ? ins : del;
+    } catch(e){ /* spans nodes */ }
+  }
+  // case B: old text gone (edit applied) → find the NEW text, prepend a struck-through `before`
+  rng = p.after ? findRange(doc, p.after) : null;
+  if (rng){
+    try {
+      const r = document.createRange(); r.setStart(rng.node, rng.start); r.setEnd(rng.node, rng.end);
+      const ins = mkIns(); r.surroundContents(ins);                        // highlight the new text in place
+      if (p.before){ const del = mkDel(); del.textContent = p.before + ' '; ins.before(del); }
+      return ins;
+    } catch(e){ /* spans nodes */ }
+  }
+  return null;
+}
 function renderStagedEdits(doc){
   doc.querySelectorAll('ins.tc-stage').forEach(n => n.remove());
   doc.querySelectorAll('del.tc-stage').forEach(n => { const p = n.parentNode; n.replaceWith(...n.childNodes); p.normalize(); });
   (review.comments||[]).forEach(c => {
-    const se = c.staged_edit; if (!se || !['staged','approved'].includes(c.status)) return;
-    const before = (se.before||'').replace(/\s+/g,' ').trim();
-    const after  = (se.after ||'').replace(/\s+/g,' ').trim();
-    if (!before) return;
-    const probe = before.slice(0, 30);
-    const blocks = [...doc.querySelectorAll('p, li, figcaption')];
-    const el = blocks.find(e => e.textContent.replace(/\s+/g,' ').includes(probe));
-    if (!el) return;
-    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let node;
-    while ((node = tw.nextNode())){
-      const collapsed = node.nodeValue.replace(/\s+/g,' ');
-      const i = collapsed.indexOf(probe); if (i < 0) continue;
-      try {
-        // map the collapsed index back to a raw-node offset
-        const rawStart = mapCollapsedIndex(node.nodeValue, i);
-        const rawEnd = mapCollapsedIndex(node.nodeValue, i + before.length);
-        const r = document.createRange(); r.setStart(node, rawStart); r.setEnd(node, Math.min(node.nodeValue.length, rawEnd));
-        if (after.startsWith(before)){                 // pure append → keep before, insert the suffix
-          const ins = document.createElement('ins'); ins.className = 'tc-stage'; ins.textContent = after.slice(before.length);
-          r.collapse(false); r.insertNode(ins);
-        } else {                                        // replace before with del+ins
-          const del = document.createElement('del'); del.className = 'tc-stage';
-          const ins = document.createElement('ins'); ins.className = 'tc-stage'; ins.textContent = after ? ' ' + after : '';
-          r.surroundContents(del); del.after(ins);
-        }
-        return;
-      } catch(e){ /* spans nodes — fall back to card-only */ return; }
-    }
+    if (!c.staged_edit || !['staged','approved'].includes(c.status)) return;
+    paintEditDiff(c);
   });
 }
 function mapCollapsedIndex(raw, collapsedIdx){            // index in whitespace-collapsed text → index in raw text
