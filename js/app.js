@@ -1225,13 +1225,16 @@ function exportDialog(scope){
     if (mode === 'instant'){
       const docEl = document.getElementById('doc');
       if (!docEl){ stat.textContent = 'Open the chapter first to export it instantly.'; return; }
-      stat.textContent = 'Building in your browser…';
+      back.querySelector('#exp-go').disabled = true; back.querySelector('#exp-cancel').disabled = true;
+      stat.innerHTML = `<div class="exp-prog"><div class="exp-prog-bar" style="width:4%"></div></div><div class="exp-prog-lbl">Starting…</div>`;
+      const bar = stat.querySelector('.exp-prog-bar'), lbl = stat.querySelector('.exp-prog-lbl');
       try {
         const comments = gatherClientComments(opts.resolved);
         const meta = { title: chMeta(scope).title, filebase: `Ch${chMeta(scope).n}_${shortTitle(chMeta(scope).title).replace(/[^a-z0-9]+/gi,'_').slice(0,40)}` };
-        await exportClient({ docEl, comments, formats, meta, save: saveBlob });
-        stat.textContent = 'Done ✓'; setTimeout(() => back.remove(), 1200);
-      } catch(e){ stat.textContent = 'Failed: ' + e.message; }
+        await exportClient({ docEl, comments, formats, meta, save: saveBlob,
+          onProgress: (frac, label) => { bar.style.width = Math.round(Math.max(0.04, frac) * 100) + '%'; if (label) lbl.textContent = label; } });
+        bar.style.width = '100%'; lbl.textContent = 'Done ✓'; setTimeout(() => back.remove(), 1100);
+      } catch(e){ lbl.textContent = 'Failed: ' + e.message; back.querySelector('#exp-go').disabled = false; back.querySelector('#exp-cancel').disabled = false; }
       return;
     }
     stat.textContent = 'Queuing…';

@@ -17,14 +17,14 @@ async function deps(needCanvas){
 
 // ---------- inline + block model from the rendered DOM ----------
 // run: {t, b, i, sup, sub} | {img:{data,w,h}}
-async function inlineRuns(node, ctx, images){
+async function inlineRuns(node, ctx, images, onMath){
   const runs = [];
   for (const ch of node.childNodes){
     if (ch.nodeType === 3){ if (ch.textContent) runs.push({ t: ch.textContent, ...ctx }); continue; }
     if (ch.nodeType !== 1) continue;
     const tag = ch.tagName.toLowerCase();
     if (ch.classList?.contains('katex') || tag === 'math' || ch.querySelector?.('.katex')){
-      const img = await snapMath(ch, images); if (img) runs.push({ img }); continue;
+      const img = await snapMath(ch, images, onMath); if (img) runs.push({ img }); continue;
     }
     if (tag === 'br'){ runs.push({ t: '\n', ...ctx }); continue; }
     const next = { ...ctx };
@@ -32,17 +32,18 @@ async function inlineRuns(node, ctx, images){
     if (tag === 'em' || tag === 'i') next.i = true;
     if (tag === 'sup') next.sup = true;
     if (tag === 'sub') next.sub = true;
-    runs.push(...await inlineRuns(ch, next, images));
+    runs.push(...await inlineRuns(ch, next, images, onMath));
   }
   return runs;
 }
-async function snapMath(el, images){
+async function snapMath(el, images, onMath){
   try { await deps(true);
     const canvas = await _h2c(el, { backgroundColor: null, scale: 2, logging: false });
     const data = canvas.toDataURL('image/png').split(',')[1];
     const id = images.length + 1; images.push({ id, data });
+    if (onMath) onMath();
     return { id, w: Math.round(canvas.width / 2 * 9525), h: Math.round(canvas.height / 2 * 9525) };   // EMUs (96dpi→EMU = *9525)
-  } catch(e){ return null; }
+  } catch(e){ if (onMath) onMath(); return null; }
 }
 function imgFromDataUri(src, images){
   const m = /^data:image\/(png|jpeg|jpg);base64,(.+)$/i.exec(src || '');
@@ -125,37 +126,37 @@ function serializeRuns(runs){
 }
 
 // ---------- walk the rendered chapter into paragraphs ----------
-async function walkBlocks(docEl, images){
+async function walkBlocks(docEl, images, onMath){
   const blocks = [];   // {style, runs, plain}
   const push = (runs, style) => blocks.push({ style, runs, plain: norm(runText(runs)) });
   async function block(el){
     const tag = el.tagName?.toLowerCase();
     if (!tag) return;
-    if (/^h[1-6]$/.test(tag)){ const lvl = Math.min(3, +tag[1]); push(await inlineRuns(el, {}, images), `Heading${lvl}`); return; }
-    if (tag === 'p'){ const r = await inlineRuns(el, {}, images); if (r.length) push(r); return; }
+    if (/^h[1-6]$/.test(tag)){ const lvl = Math.min(3, +tag[1]); push(await inlineRuns(el, {}, images, onMath), `Heading${lvl}`); return; }
+    if (tag === 'p'){ const r = await inlineRuns(el, {}, images, onMath); if (r.length) push(r); return; }
     if (tag === 'figure'){
       const img = el.querySelector('img'); if (img){ const i = imgFromDataUri(img.src, images); if (i) push([{ img: { ...i, w: 4572000, h: undefined } }], 'Figure'); }
-      const cap = el.querySelector('figcaption'); if (cap) push(await inlineRuns(cap, { i: true }, images), 'Caption');
+      const cap = el.querySelector('figcaption'); if (cap) push(await inlineRuns(cap, { i: true }, images, onMath), 'Caption');
       return;
     }
     if (tag === 'ul' || tag === 'ol'){
       let n = 1;
-      for (const li of el.querySelectorAll(':scope > li')){ const pre = tag === 'ol' ? `${n++}. ` : '• '; push([{ t: pre }].concat(await inlineRuns(li, {}, images))); }
+      for (const li of el.querySelectorAll(':scope > li')){ const pre = tag === 'ol' ? `${n++}. ` : '• '; push([{ t: pre }].concat(await inlineRuns(li, {}, images, onMath))); }
       return;
     }
-    if (tag === 'table'){ blocks.push({ table: await tableModel(el, images) }); return; }
+    if (tag === 'table'){ blocks.push({ table: await tableModel(el, images, onMath) }); return; }
     if (tag === 'section' || tag === 'div'){ for (const c of el.children) await block(c); return; }
     // fallback: treat as paragraph if it has text
-    const r = await inlineRuns(el, {}, images); if (norm(runText(r))) push(r);
+    const r = await inlineRuns(el, {}, images, onMath); if (norm(runText(r))) push(r);
   }
   for (const c of docEl.children) await block(c);
   return blocks;
 }
-async function tableModel(tbl, images){
+async function tableModel(tbl, images, onMath){
   const rows = [];
   for (const tr of tbl.querySelectorAll('tr')){
     const cells = [];
-    for (const td of tr.querySelectorAll('th,td')) cells.push(await inlineRuns(td, { b: td.tagName.toLowerCase() === 'th' }, images));
+    for (const td of tr.querySelectorAll('th,td')) cells.push(await inlineRuns(td, { b: td.tagName.toLowerCase() === 'th' }, images, onMath));
     if (cells.length) rows.push(cells);
   }
   return rows;
@@ -167,10 +168,15 @@ function tableXml(rows){
 }
 
 // ---------- build the .docx ----------
-async function buildDocx(docEl, comments, meta){
+async function buildDocx(docEl, comments, meta, report){
+  report && report(0.04, 'Loading export engine…');
   await deps(false);
   const images = [];
-  const blocks = await walkBlocks(docEl, comments && comments.length ? images : images);
+  const totalMath = docEl.querySelectorAll('.katex').length; let doneMath = 0;
+  const onMath = () => { doneMath++; report && report(0.08 + 0.72 * (doneMath / Math.max(1, totalMath)), `Rendering equations (${doneMath}/${totalMath})…`); };
+  report && report(0.08, totalMath ? 'Rendering equations…' : 'Building document…');
+  const blocks = await walkBlocks(docEl, images, totalMath ? onMath : null);
+  report && report(0.84, 'Building document…');
   // anchor comments into the paragraph blocks
   const commentEntries = []; const used = new Set();
   (comments || []).forEach((c, i) => {
@@ -222,7 +228,10 @@ async function buildDocx(docEl, comments, meta){
   zip.file('word/comments.xml', commentsXml);
   zip.file('word/styles.xml', stylesXml());
   for (const im of images) zip.file(`word/media/image${im.id}.${im.ext || 'png'}`, im.data, { base64: true });
-  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  report && report(0.92, 'Packaging .docx…');
+  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  report && report(1, 'Done');
+  return blob;
 }
 function stylesXml(){
   const h = (id, name, sz) => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="${sz}"/></w:rPr></w:style>`;
@@ -284,12 +293,16 @@ function printPDF(docEl, comments, meta){
 }
 
 // ---------- public entry ----------
-export async function exportClient({ docEl, comments, formats, meta, save }){
+export async function exportClient({ docEl, comments, formats, meta, save, onProgress }){
   const base = (meta?.filebase || 'chapter');
+  const N = formats.length; let idx = 0;
+  const step = (frac, label) => onProgress && onProgress((idx + Math.min(1, frac)) / N, label);
   for (const fmt of formats){
-    if (fmt === 'md'){ await save(new Blob([buildMarkdown(docEl, comments, meta)], { type: 'text/markdown' }), `${base}.md`); }
-    else if (fmt === 'docx'){ const blob = await buildDocx(docEl, comments, meta); await save(blob, `${base}.docx`); }
-    else if (fmt === 'pdf'){ printPDF(docEl, comments, meta); }
+    if (fmt === 'md'){ step(0.3, 'Writing Markdown…'); await save(new Blob([buildMarkdown(docEl, comments, meta)], { type: 'text/markdown' }), `${base}.md`); step(1, 'Saved Markdown'); }
+    else if (fmt === 'docx'){ const blob = await buildDocx(docEl, comments, meta, step); step(0.98, 'Saving…'); await save(blob, `${base}.docx`); }
+    else if (fmt === 'pdf'){ step(0.5, 'Opening print view…'); printPDF(docEl, comments, meta); step(1, 'Print dialog opened'); }
+    idx++;
   }
+  onProgress && onProgress(1, 'Done');
 }
 
