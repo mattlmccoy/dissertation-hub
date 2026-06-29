@@ -343,36 +343,22 @@ def cmd_merge(a):
         shutil.copy(src, os.path.join(a.data, "content", f"{ch}.html"))
     prev = os.path.join(a.data, "preview", f"{ch}.html")   # published == staged now; drop the preview
     if os.path.exists(prev): os.remove(prev)
-    # decision subset: prefer the merge job's explicit lists, else fall back to "all staged"
+    # status-driven: comments with status 'approved' are the queued-for-merge set. Reject/revise
+    # were already applied in the app when the owner queued, so there is nothing to do here for
+    # those. A legacy job may still carry an explicit 'decisions' snapshot -> honor its approved list.
     job = next((j for j in load(jobs_path(a.data), []) if j.get("type") == "merge"
                 and j.get("chapter") == ch and j.get("status") == "queued"), None)
     sel = (job or {}).get("decisions")
+    legacy_approved = set((sel or {}).get("approved", [])) if sel else None
     rp = review_path(a.data, ch); review = load(rp, None); n = 0
-    requeue = []
     if review:
-        approved = set((sel or {}).get("approved", []))
-        rejected = set((sel or {}).get("rejected", []))
-        revise = {d["cid"]: d.get("note", "") for d in (sel or {}).get("revise", [])}
         for c in review.get("comments", []):
-            if c.get("status") not in ("staged", "approved"): continue
-            cid = c.get("id")
-            if sel is None or cid in approved:
+            cid = c.get("id"); st = c.get("status")
+            is_approved = (cid in legacy_approved) if legacy_approved is not None else (st == "approved")
+            if is_approved and st in ("approved", "staged"):
                 c["status"] = "merged"; c.setdefault("claude", {})["branch"] = branch; n += 1
-            elif cid in rejected:
-                c["status"] = "declined"; c.pop("staged_edit", None)
-            elif cid in revise:
-                c["status"] = "queued"; c.pop("staged_edit", None)
-                requeue.append((cid, revise[cid]))
-            # undecided staged comments are left as-is for a later round
+            # 'staged' (undecided) is left alone; 'declined'/'queued' were set at queue time
         dump(rp, review)
-    # re-queue 'revise' comments as fresh apply-edits jobs carrying the note
-    if requeue:
-        jobs = load(jobs_path(a.data), [])
-        for cid, note in requeue:
-            jobs.append({"id": "j_" + uniq(), "type": "apply-edits", "chapter": ch,
-                         "comment_ids": [cid], "revision": True, "revise_note": note,
-                         "status": "queued", "requested_ts": now()})
-        dump(jobs_path(a.data), jobs)
     jobs = load(jobs_path(a.data), [])
     for j in jobs:
         if j.get("type") == "merge" and j.get("chapter") == ch and j.get("status") == "queued":
