@@ -34,17 +34,20 @@ let reviewSha = null, syncTimer = null, scrollSaveT = null;
 // state on the server (merged/answered/declined/resolved) always wins over a stale local non-terminal
 // status, so a lagging tab can never overwrite a completed merge. Local wins for everything else
 // (the owner's in-progress decisions), and remote-only comments are pulled in.
+// Only 'merged'/'declined' are truly FINAL (the edit is in main / discarded). 'answered' and
+// 'resolved' are re-openable (a reply re-queues, the owner can reopen), so they must NOT block
+// adopting the server's newer status — that was leaving re-queued/staged comments stuck.
+const FINAL_STATES = new Set(['merged', 'declined']);
 function reconcileReview(local, remote, preferRemote){
   if (!remote) return local;
   const byId = Object.fromEntries((remote.comments||[]).map(c => [c.id, c]));
   const adopt = (lc, rc) => ({ ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution });
   const comments = (local.comments||[]).map(lc => {
     const rc = byId[lc.id]; if (!rc) return lc;
-    const rTerm = RESOLVED_STATES.has(rc.status), lTerm = RESOLVED_STATES.has(lc.status);
-    if (rTerm && !lTerm) return adopt(lc, rc);    // never downgrade a finalized comment (e.g. merged) back to a working state
-    if (lTerm && !rTerm) return lc;               // keep a local terminal over a remote working state
-    if (preferRemote)    return adopt(lc, rc);    // syncDown: server is truth for working states (pull the executor's 'staged'/'answered')
-    return lc;                                    // syncUp: keep local intent (approve/unqueue) for working states
+    if (FINAL_STATES.has(rc.status) && !FINAL_STATES.has(lc.status)) return adopt(lc, rc);   // server finalized it (e.g. merged) — adopt, never downgrade
+    if (FINAL_STATES.has(lc.status) && !FINAL_STATES.has(rc.status)) return lc;              // local finalized — keep; a working remote can't undo a merge
+    if (preferRemote) return adopt(lc, rc);                                                  // syncDown: server is the source of truth for every working state
+    return lc;                                                                               // syncUp: keep the owner's local intent (approve/unqueue/reply)
   });
   for (const rc of remote.comments||[]) if (!comments.find(c => c.id === rc.id)) comments.push(rc);
   return { ...local, comments };
