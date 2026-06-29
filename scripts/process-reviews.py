@@ -126,6 +126,11 @@ def cmd_list(a):
             print(f"{C['c']}{j['id']}{C['x']}  {C['b']}{tgt}{C['x']}  →  {C['y']}export{C['x']}: {', '.join(j.get('formats', []))}")
             print(f"   {C['dim']}Build it: process-reviews.py export {j['id']}{C['x']}\n")
             continue
+        if j.get("type") == "apply-direct":
+            review, cmts = comments_for(a.data, j)
+            print(f"{C['c']}{j['id']}{C['x']}  {C['b']}{ch}{C['x']}  →  {C['y']}direct edits{C['x']} ({len(cmts)}) on chapters/{ch}.tex {ok}")
+            print(f"   {C['dim']}Apply literally (no AI): process-reviews.py apply-direct {j['id']}{C['x']}\n")
+            continue
         review, cmts = comments_for(a.data, j)
         print(f"{C['c']}{j['id']}{C['x']}  {C['b']}{ch}{C['x']}  →  review-edits/{ch}   "
               f"target: chapters/{ch}.tex {ok}   ({len(cmts)} comment(s))")
@@ -341,6 +346,9 @@ def cmd_merge(a):
     src = os.path.join(a.diss, "export", "build", f"{ch}.html")
     if os.path.exists(src):
         shutil.copy(src, os.path.join(a.data, "content", f"{ch}.html"))
+        smap = os.path.join(a.diss, "export", "build", f"{ch}.srcmap.json")   # refresh the editor's source map
+        if os.path.exists(smap):
+            shutil.copy(smap, os.path.join(a.data, "content", f"{ch}.srcmap.json"))
     prev = os.path.join(a.data, "preview", f"{ch}.html")   # published == staged now; drop the preview
     if os.path.exists(prev): os.remove(prev)
     # status-driven: comments with status 'approved' are the queued-for-merge set. Reject/revise
@@ -607,6 +615,91 @@ def cmd_export(a):
     print(f"{C['g']}Export {a.job_id} done — {len(artifacts)} artifact(s) under exports/{label}/.{C['x']}")
 
 
+# ---------------- direct editor: deterministic literal source edits (no Claude) ----------------
+def _chapter_sources(diss, ch):
+    """The chapter .tex plus any files it \\input/\\include (one level), as absolute paths."""
+    main_tex = os.path.join(diss, "chapters", f"{ch}.tex")
+    files = [main_tex] if os.path.exists(main_tex) else []
+    if files:
+        body = open(main_tex, encoding="utf-8").read()
+        for m in re.finditer(r"\\(?:input|include)\{([^}]+)\}", body):
+            rel = m.group(1)
+            if not rel.endswith(".tex"): rel += ".tex"
+            fp = os.path.join(diss, rel)
+            if os.path.exists(fp): files.append(fp)
+    return files
+
+def _literal_replace(diss, ch, find, repl):
+    """Replace the verbatim `find` with `repl` across the chapter's sources. Returns (ok, msg)."""
+    if not find:
+        return False, "empty find"
+    hits = []
+    for fp in _chapter_sources(diss, ch):
+        txt = open(fp, encoding="utf-8").read()
+        n = txt.count(find)
+        if n: hits.append((fp, n, txt))
+    total = sum(n for _, n, _ in hits)
+    if total == 0:
+        return False, "source text not found (it may have changed since the edit was drafted)"
+    if total > 1:
+        return False, f"ambiguous — {total} occurrences; edit needs a longer unique anchor"
+    fp, _, txt = hits[0]
+    open(fp, "w", encoding="utf-8").write(txt.replace(find, repl, 1))
+    return True, os.path.relpath(fp, diss)
+
+def cmd_apply_direct(a):
+    """Apply owner direct-edits (kind=direct) literally to the chapter source on review-edits/<ch>."""
+    pull(a.data); pull(a.diss)
+    job = find_job(a.data, a.job_id)
+    ch = job["chapter"]; branch = f"review-edits/{ch}"
+    if sh(["git", "branch", "--list", branch], a.diss):
+        sh(["git", "checkout", branch], a.diss)
+    else:
+        sh(["git", "checkout", "-b", branch, "origin/main"], a.diss, check=False) or sh(["git", "checkout", "-b", branch], a.diss)
+    review, cmts = comments_for(a.data, job)
+    applied, flagged = 0, 0
+    for c in cmts:
+        e = c.get("edit") or {}
+        ok, msg = _literal_replace(a.diss, ch, e.get("find", ""), e.get("replacement", ""))
+        if ok:
+            c["status"] = "staged"; c.setdefault("claude", {})["branch"] = branch; applied += 1
+            print(f"{C['g']}applied{C['x']} {c['id']} -> {msg}")
+        else:
+            c["status"] = "conflict"; c.setdefault("claude", {})["reason"] = msg; flagged += 1
+            print(f"{C['y']}flagged{C['x']} {c['id']}: {msg}")
+    dump(review_path(a.data, ch), review)
+    if applied:
+        sh(["git", "add", "-A"], a.diss)
+        sh(["git", "commit", "-m", f"direct edits ({applied}) on {ch} from reviewer app"], a.diss, check=False)
+        sh(["git", "push", "-u", "origin", branch], a.diss, check=False)
+    jobs = load(jobs_path(a.data), [])
+    for j in jobs:
+        if j.get("id") == a.job_id: j["status"] = "done"; j["done_ts"] = now()
+    dump(jobs_path(a.data), jobs)
+    _push_data(a, f"direct: {ch} — {applied} applied, {flagged} flagged")
+    print(f"{C['g']}apply-direct {ch}: {applied} applied, {flagged} flagged.{C['x']} Preview, then merge {ch}.")
+
+def cmd_publish_srcmaps(a):
+    """Generate content/<ch>.srcmap.json for every chapter so the app can offer in-context editing."""
+    pull(a.data); pull(a.diss)
+    order = _chapter_order(a.diss); built = 0
+    bd = os.path.join(a.diss, "export", "build"); os.makedirs(bd, exist_ok=True)
+    for ch in order:
+        html = os.path.join(a.data, "content", f"{ch}.html")
+        if not os.path.exists(html):
+            print(f"{C['dim']}skip {ch} (no published HTML){C['x']}"); continue
+        pre = os.path.join(bd, f"{ch}.pre.tex")
+        with open(pre, "w", encoding="utf-8") as f:
+            r = subprocess.run(["python3", "export/preprocess.py", ch], cwd=a.diss, capture_output=True, text=True)
+            f.write(r.stdout)
+        out = os.path.join(a.data, "content", f"{ch}.srcmap.json")
+        s = subprocess.run(["python3", "export/srcmap.py", ch, pre, html, out], cwd=a.diss, capture_output=True, text=True)
+        print("  " + (s.stdout.strip() or s.stderr.strip()[-120:]))
+        if os.path.exists(out): built += 1
+    _push_data(a, f"srcmaps: published {built} chapter map(s)")
+    print(f"{C['g']}Published {built} source map(s).{C['x']}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data", default=DEFAULT_DATA, help="local clone of dissertation-tracker-data")
@@ -621,6 +714,8 @@ def main():
     sp = sub.add_parser("preview", help="build review-edits/<ch> into preview/<ch>.html (no merge)"); sp.add_argument("chapter"); sp.set_defaults(fn=cmd_preview)
     sp = sub.add_parser("done", help="mark any job done (e.g. after run-agents)"); sp.add_argument("job_id"); sp.set_defaults(fn=cmd_done)
     sp = sub.add_parser("export", help="build a queued export job (chapter/dissertation -> docx·pdf·md with comments)"); sp.add_argument("job_id"); sp.set_defaults(fn=cmd_export)
+    sp = sub.add_parser("apply-direct", help="apply owner direct-edits literally to source on review-edits/<ch>"); sp.add_argument("job_id"); sp.set_defaults(fn=cmd_apply_direct)
+    sub.add_parser("publish-srcmaps", help="generate content/<ch>.srcmap.json for all chapters (enables in-context editing)").set_defaults(fn=cmd_publish_srcmaps)
     sp_decide = sub.add_parser("decide", help="record an owner decision on a staged comment"); sp_decide.add_argument("chapter"); sp_decide.add_argument("comment_id"); sp_decide.add_argument("decision", choices=["approve", "reject", "revise"]); sp_decide.add_argument("note", nargs="?", default=""); sp_decide.set_defaults(fn=cmd_decide)
     sub.add_parser("advisor-list", help="list advisor-submitted comments + resolutions").set_defaults(fn=cmd_advisor_list)
     sp = sub.add_parser("advisor-resolve", help="record how an advisor comment was addressed"); sp.add_argument("advisor"); sp.add_argument("chapter"); sp.add_argument("comment_id"); sp.add_argument("state", choices=["addressed","declined","noted"]); sp.add_argument("note"); sp.add_argument("--before", default=""); sp.add_argument("--after", default=""); sp.set_defaults(fn=cmd_advisor_resolve)
