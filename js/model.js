@@ -23,13 +23,31 @@ export const setDecision = (r, id, decision, note) => ({ ...r, comments: r.comme
   return decision ? { ...rest, decision, ...(note ? { decision_note: note } : {}), decision_ts: new Date().toISOString() } : rest;
 }) });
 
-// split the chapter's STAGED comments by owner decision (ignores non-staged)
+// split STAGED comments by owner decision; report already-queued (status 'approved') separately
 export const partitionByDecision = (comments) => {
-  const staged = (comments || []).filter(c => c.status === 'staged' || c.status === 'approved');
+  const list = comments || [];
+  const staged = list.filter(c => c.status === 'staged');
   return {
     approved:  staged.filter(c => c.decision === 'approve').map(c => c.id),
     rejected:  staged.filter(c => c.decision === 'reject').map(c => c.id),
     revise:    staged.filter(c => c.decision === 'revise').map(c => ({ cid: c.id, note: c.decision_note || '' })),
     undecided: staged.filter(c => !c.decision).map(c => c.id),
+    queued:    list.filter(c => c.status === 'approved').map(c => c.id),
   };
+};
+
+// promote staged comments by their decision: approve->'approved' (queued for merge, edit kept),
+// reject->'declined' (edit dropped), revise->'queued' (edit dropped). Returns the new review + the
+// list of comments to re-queue for a Claude redo. The decision flag is consumed (status is now truth).
+export const queueApproved = (review) => {
+  const revise = [];
+  const comments = review.comments.map(c => {
+    if (c.status !== 'staged' || !c.decision) return c;
+    const { decision, decision_note, decision_ts, staged_edit, ...rest } = c;
+    if (decision === 'approve') return { ...rest, staged_edit, status: 'approved' };
+    if (decision === 'reject')  return { ...rest, status: 'declined' };
+    revise.push({ cid: c.id, note: decision_note || '' });
+    return { ...rest, status: 'queued' };
+  });
+  return { review: { ...review, comments }, revise };
 };

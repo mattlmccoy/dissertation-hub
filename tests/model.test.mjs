@@ -1,6 +1,7 @@
 import { test } from 'node:test'; import assert from 'node:assert/strict';
 import { newReview, addComment, updateComment, deleteComment, setCursor } from '../js/model.js';
 import { setDecision, partitionByDecision } from '../js/model.js';
+import { queueApproved } from '../js/model.js';
 
 test('newReview seeds empty review for a chapter', () => {
   const r = newReview('ch_modeling', 'abc123');
@@ -60,4 +61,34 @@ test('partitionByDecision groups staged comments by decision', () => {
   assert.deepEqual(p.rejected, ['b']);
   assert.deepEqual(p.revise, [{ cid:'c', note:'n' }]);
   assert.deepEqual(p.undecided, ['d']);   // 'e' is not staged -> ignored
+});
+
+test('queueApproved promotes by decision and returns the revise list', () => {
+  let r = { chapter:'c', comments:[
+    { id:'a', status:'staged', decision:'approve', staged_edit:{before:'x',after:'y'} },
+    { id:'b', status:'staged', decision:'reject',  staged_edit:{before:'x',after:'y'} },
+    { id:'c', status:'staged', decision:'revise', decision_note:'soften', staged_edit:{before:'x',after:'y'} },
+    { id:'d', status:'staged' },                                  // undecided -> untouched
+    { id:'e', status:'merged', decision:'approve' },              // already done -> untouched
+  ]};
+  const { review, revise } = queueApproved(r);
+  const by = Object.fromEntries(review.comments.map(c => [c.id, c]));
+  assert.equal(by.a.status, 'approved'); assert.ok(by.a.staged_edit); assert.equal(by.a.decision, undefined);
+  assert.equal(by.b.status, 'declined'); assert.equal(by.b.staged_edit, undefined);
+  assert.equal(by.c.status, 'queued');   assert.equal(by.c.staged_edit, undefined);
+  assert.equal(by.d.status, 'staged');
+  assert.equal(by.e.status, 'merged');
+  assert.deepEqual(revise, [{ cid:'c', note:'soften' }]);
+});
+
+test('partitionByDecision is staged-only and counts already-queued separately', () => {
+  const comments = [
+    { id:'a', status:'staged', decision:'approve' },
+    { id:'q', status:'approved' },                               // already queued for merge
+    { id:'d', status:'staged' },
+  ];
+  const p = partitionByDecision(comments);
+  assert.deepEqual(p.approved, ['a']);
+  assert.deepEqual(p.undecided, ['d']);
+  assert.deepEqual(p.queued, ['q']);
 });
