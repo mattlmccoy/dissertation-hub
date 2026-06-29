@@ -1157,16 +1157,33 @@ async function renderExportDownloads(){
     }).join('');
   box.querySelectorAll('.exp-dl').forEach(b => b.onclick = () => downloadArtifact(b.dataset.path));
 }
+const _SAVE_TYPES = {
+  docx: { description:'Word document', accept:{ 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx'] } },
+  pdf:  { description:'PDF', accept:{ 'application/pdf':['.pdf'] } },
+  md:   { description:'Markdown', accept:{ 'text/markdown':['.md'] } },
+};
 async function downloadArtifact(path){
   const t = tok(); if (!t){ flash('Add your access token first.'); return; }
   flash('Fetching…');
+  let blob;
   try { const url = `https://api.github.com/repos/mattlmccoy/dissertation-tracker-data/contents/${path}?t=${Date.now()}`;
     const r = await fetch(url, { headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' }, cache:'no-store' });
     if (!r.ok) throw new Error('GitHub '+r.status);
-    const blob = await r.blob(); const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = path.split('/').pop(); document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
-  catch(e){ flash('Download failed: ' + e.message); }
+    blob = await r.blob();
+  } catch(e){ flash('Download failed: ' + e.message); return; }
+  const filename = path.split('/').pop();
+  // Chromium: native Finder/Explorer save dialog (you pick the folder). Safari/Firefox: standard download.
+  if (window.showSaveFilePicker){
+    try {
+      const ext = (filename.split('.').pop()||'').toLowerCase(); const ty = _SAVE_TYPES[ext];
+      const handle = await window.showSaveFilePicker({ suggestedName: filename, ...(ty ? { types:[ty] } : {}) });
+      const ws = await handle.createWritable(); await ws.write(blob); await ws.close();
+      flash('Saved ✓'); return;
+    } catch(e){ if (e.name === 'AbortError') return; /* unsupported/blocked → fall back below */ }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 function restoreCursor(){ if (review.cursor?.sec){ document.getElementById(review.cursor.sec)?.scrollIntoView(); } }
 
