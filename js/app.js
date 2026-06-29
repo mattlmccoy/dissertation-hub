@@ -34,14 +34,17 @@ let reviewSha = null, syncTimer = null, scrollSaveT = null;
 // state on the server (merged/answered/declined/resolved) always wins over a stale local non-terminal
 // status, so a lagging tab can never overwrite a completed merge. Local wins for everything else
 // (the owner's in-progress decisions), and remote-only comments are pulled in.
-function reconcileReview(local, remote){
+function reconcileReview(local, remote, preferRemote){
   if (!remote) return local;
   const byId = Object.fromEntries((remote.comments||[]).map(c => [c.id, c]));
+  const adopt = (lc, rc) => ({ ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution });
   const comments = (local.comments||[]).map(lc => {
-    const rc = byId[lc.id];
-    if (rc && RESOLVED_STATES.has(rc.status) && !RESOLVED_STATES.has(lc.status))
-      return { ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution };
-    return lc;
+    const rc = byId[lc.id]; if (!rc) return lc;
+    const rTerm = RESOLVED_STATES.has(rc.status), lTerm = RESOLVED_STATES.has(lc.status);
+    if (rTerm && !lTerm) return adopt(lc, rc);    // never downgrade a finalized comment (e.g. merged) back to a working state
+    if (lTerm && !rTerm) return lc;               // keep a local terminal over a remote working state
+    if (preferRemote)    return adopt(lc, rc);    // syncDown: server is truth for working states (pull the executor's 'staged'/'answered')
+    return lc;                                    // syncUp: keep local intent (approve/unqueue) for working states
   });
   for (const rc of remote.comments||[]) if (!comments.find(c => c.id === rc.id)) comments.push(rc);
   return { ...local, comments };
@@ -49,7 +52,7 @@ function reconcileReview(local, remote){
 async function syncDown(){
   const t = tok(); if (!t) return;
   try { const { json, sha } = await getJson(t, reviewPath(current)); reviewSha = sha;
-    if (json){ review = reconcileReview(review, json); save(); renderComments(); if (document.getElementById('doc')){ buildNav(); paintHighlights(); refreshStaged(); } } }
+    if (json){ review = reconcileReview(review, json, true); save(); renderComments(); if (document.getElementById('doc')){ buildNav(); paintHighlights(); refreshStaged(); } } }
   catch(e){ /* offline / first time */ }
 }
 function syncUpSoon(){ if (!tok()) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncUp, 1200); }
@@ -58,7 +61,7 @@ async function syncUp(){
   for (let attempt = 0; attempt < 5; attempt++){
     try {
       const { json, sha } = await getJson(t, reviewPath(current));
-      review = reconcileReview(review, json);            // adopt the executor's terminal statuses before pushing — never clobber a merge
+      review = reconcileReview(review, json, false);     // syncUp: keep local intent for working states; never downgrade a remote terminal (no merge clobber)
       save();
       reviewSha = await putJson(t, reviewPath(current), review, sha || reviewSha, 'review: '+current, false);
       renderComments(); if (document.getElementById('doc')) refreshStaged();
@@ -371,7 +374,7 @@ function buildNav(){
   hs.forEach((h, i) => {
     if (!h.id) h.id = 'sec-' + i;
     const sub = h.tagName === 'H3';
-    const cnt = review.comments.filter(c => (c.anchor.section||'') === h.textContent.trim()).length;
+    const cnt = review.comments.filter(c => !RESOLVED_STATES.has(c.status) && (c.anchor.section||'') === h.textContent.trim()).length;   // active comments only
     const done = !!review.read[h.id];
     const a = document.createElement('a'); a.className = sub ? 'sub' : ''; a.dataset.sec = h.id;
     a.innerHTML = `<button class="chk${done?' on':''}" title="Mark section read"><i class="ti ti-${done?'circle-check-filled':'circle'}"></i></button>
@@ -837,7 +840,7 @@ function paintHighlights(){
   doc.querySelectorAll('figure[data-cid]').forEach(f => { f.classList.remove('cmark-fig'); delete f.dataset.cid; });
   const blocks = [...doc.querySelectorAll('p, li, figcaption')];
   review.comments.forEach(c => {
-    if (c.status === 'resolved') return;
+    if (RESOLVED_STATES.has(c.status)) return;   // don't highlight finalized comments (merged/answered/declined/resolved)
     if (c.kind === 'figure'){ markFigure(doc, c); return; }
     const q = (c.anchor.quote||'').replace(/\s+/g,' ').trim(); if (q.length < 4) return;
     const needle = q.slice(0, 50);
