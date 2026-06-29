@@ -734,18 +734,26 @@ function locateAnchor(c, { allowSection = true } = {}){
   }
   return null;
 }
+// where to scroll for a comment. In preview the doc is already the final text, so we locate the
+// NEW wording cleanly (no track-changes overlay); otherwise we paint ~~before~~ after at the spot.
+function jumpTarget(c){
+  if (previewing){
+    const p = editPair(c);
+    if (p?.after){ const rng = findRange(document.getElementById('doc'), p.after); if (rng) return rng.node.parentElement; }
+  } else if (editPair(c)){
+    const el = paintEditDiff(c); if (el) return el;
+  }
+  return locateAnchor(c, { allowSection:false }) || locateAnchor(c, { allowSection:true });
+}
 function jumpToAdvisor(c){
-  let el = editPair(c) ? paintEditDiff(c) : null;          // edit comments: show ~~before~~ after, wherever the text now is
-  if (!el) el = locateAnchor(c, { allowSection:false });
-  if (!el) el = locateAnchor(c, { allowSection:true });
+  const el = jumpTarget(c);
   if (el) scrollFlash(el); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
 }
 // jump after a chapter is still loading: retry until the doc is ready, then prefer the edit-diff
 function jumpWhenReady(c, tries = 14){
   const tick = () => {
     if (document.getElementById('doc')){
-      let el = editPair(c) ? paintEditDiff(c) : null;
-      if (!el) el = locateAnchor(c, { allowSection: tries <= 1 });       // hold the section fallback until the end
+      const el = jumpTarget(c);
       if (el){ scrollFlash(el); return; }
     }
     if (tries-- > 0) setTimeout(tick, 280); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
@@ -775,9 +783,7 @@ function editCard(c){
 }
 function jumpTo(c){
   activeCommentId = c.id;
-  let el = editPair(c) ? paintEditDiff(c) : null;          // edit comments: show ~~before~~ after, wherever the text now is
-  if (!el) el = locateAnchor(c, { allowSection:false });
-  if (!el) el = locateAnchor(c, { allowSection:true });
+  const el = jumpTarget(c);
   if (el) scrollFlash(el); else flash('Couldn’t find this passage in the chapter — it may have changed since the comment.');
 }
 function activateComment(id){
@@ -899,6 +905,7 @@ function paintEditDiff(c){
 function renderStagedEdits(doc){
   doc.querySelectorAll('ins.tc-stage').forEach(n => n.remove());
   doc.querySelectorAll('del.tc-stage').forEach(n => { const p = n.parentNode; n.replaceWith(...n.childNodes); p.normalize(); });
+  if (previewing) return;            // preview already shows the final rendered text — no track-changes overlay
   (review.comments||[]).forEach(c => {
     if (!c.staged_edit || !['staged','approved'].includes(c.status)) return;
     paintEditDiff(c);
