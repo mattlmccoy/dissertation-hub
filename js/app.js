@@ -734,13 +734,14 @@ function locateAnchor(c, { allowSection = true } = {}){
   }
   return null;
 }
-// where to scroll for a comment. In preview the doc is already the final text, so we locate the
-// NEW wording cleanly (no track-changes overlay); otherwise we paint ~~before~~ after at the spot.
+// where to scroll for a comment. Clicking an edit comment paints THAT comment's ~~before~~ after
+// at the spot (in both normal and preview mode). In preview we first clear any other comment's
+// overlay so only the clicked change is shown over the otherwise-clean rendered text.
 function jumpTarget(c){
-  if (previewing){
-    const p = editPair(c);
-    if (p?.after){ const rng = findRange(document.getElementById('doc'), p.after); if (rng) return rng.node.parentElement; }
-  } else if (editPair(c)){
+  if (editPair(c)){
+    if (previewing) document.querySelectorAll('#doc ins.tc-stage, #doc del.tc-stage').forEach(n => {
+      if (n.tagName === 'DEL'){ const p = n.parentNode; n.replaceWith(...n.childNodes); p.normalize(); } else n.remove();
+    });
     const el = paintEditDiff(c); if (el) return el;
   }
   return locateAnchor(c, { allowSection:false }) || locateAnchor(c, { allowSection:true });
