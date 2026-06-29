@@ -30,17 +30,41 @@ const tok = () => localStorage.getItem('ghpat');
 
 // ---------- GitHub review sync (private data repo) ----------
 let reviewSha = null, syncTimer = null, scrollSaveT = null;
+// Reconcile local against remote WITHOUT downgrading: a comment the executor moved to a terminal
+// state on the server (merged/answered/declined/resolved) always wins over a stale local non-terminal
+// status, so a lagging tab can never overwrite a completed merge. Local wins for everything else
+// (the owner's in-progress decisions), and remote-only comments are pulled in.
+function reconcileReview(local, remote){
+  if (!remote) return local;
+  const byId = Object.fromEntries((remote.comments||[]).map(c => [c.id, c]));
+  const comments = (local.comments||[]).map(lc => {
+    const rc = byId[lc.id];
+    if (rc && RESOLVED_STATES.has(rc.status) && !RESOLVED_STATES.has(lc.status))
+      return { ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution };
+    return lc;
+  });
+  for (const rc of remote.comments||[]) if (!comments.find(c => c.id === rc.id)) comments.push(rc);
+  return { ...local, comments };
+}
 async function syncDown(){
   const t = tok(); if (!t) return;
   try { const { json, sha } = await getJson(t, reviewPath(current)); reviewSha = sha;
-    if (json){ review = mergeReview(review, json); save(); renderComments(); if (document.getElementById('doc')){ buildNav(); paintHighlights(); refreshStaged(); } } }
+    if (json){ review = reconcileReview(review, json); save(); renderComments(); if (document.getElementById('doc')){ buildNav(); paintHighlights(); refreshStaged(); } } }
   catch(e){ /* offline / first time */ }
 }
 function syncUpSoon(){ if (!tok()) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncUp, 1200); }
 async function syncUp(){
   const t = tok(); if (!t) return;
-  try { const { sha } = await getJson(t, reviewPath(current)); reviewSha = await putJson(t, reviewPath(current), review, sha || reviewSha, 'review: '+current); }
-  catch(e){ /* retried on next change */ }
+  for (let attempt = 0; attempt < 5; attempt++){
+    try {
+      const { json, sha } = await getJson(t, reviewPath(current));
+      review = reconcileReview(review, json);            // adopt the executor's terminal statuses before pushing — never clobber a merge
+      save();
+      reviewSha = await putJson(t, reviewPath(current), review, sha || reviewSha, 'review: '+current, false);
+      renderComments(); if (document.getElementById('doc')) refreshStaged();
+      return;
+    } catch(e){ if (/\b409\b/.test(e.message) && attempt < 4){ await new Promise(r => setTimeout(r, 250*(attempt+1))); continue; } return; /* offline: retried on next change */ }
+  }
 }
 
 // ---------- top bar ----------
