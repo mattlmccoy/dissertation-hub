@@ -613,7 +613,8 @@ function buildCommentCard(c){
         <button class="btn cdec-b ${c.decision==='approve'?'on-approve':''}" data-d="approve"><i class="ti ti-check"></i>Approve</button>
         <button class="btn cdec-b ${c.decision==='reject'?'on-reject':''}" data-d="reject"><i class="ti ti-x"></i>Reject</button>
         <button class="btn cdec-b ${c.decision==='revise'?'on-revise':''}" data-d="revise"><i class="ti ti-pencil"></i>Request changes</button>
-      </div>` : ''}
+      </div>
+      <div class="cdec-revform" style="display:none"><textarea class="cdec-revt" rows="2" placeholder="What should change? This re-queues the edit for Claude."></textarea><div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary cdec-revsend" style="padding:4px 11px;font-size:11.5px">Request changes</button><button class="btn cdec-revcancel" style="padding:4px 11px;font-size:11.5px">Cancel</button></div></div>` : ''}
       ${c.status === 'approved' ? `<div class="cdec" data-id="${c.id}"><span class="cqd"><i class="ti ti-clock-check"></i>queued for merge</span><button class="btn cunq" data-id="${c.id}"><i class="ti ti-arrow-back-up"></i>Unqueue</button></div>` : ''}
       ${c.claude?.response ? `<div class="cresp"><div class="cresp-h"><i class="ti ti-robot-face"></i>Claude</div>${escapeHtml(c.claude.response)}</div>` : ''}
       ${c.claude?.branch ? `<div class="branch"><i class="ti ti-git-branch"></i>${escapeHtml(c.claude.branch)}</div>` : ''}
@@ -631,14 +632,18 @@ function buildCommentCard(c){
       e.stopPropagation();
       const d = b.dataset.d;
       const cur = (review.comments.find(x => x.id === c.id)||{}).decision;
-      if (d === 'revise'){
-        const note = prompt('What should change? (re-queues this edit for Claude)', '');
-        if (note === null) return;
-        try { await recordDecision(c.id, 'revise', note.trim()); } catch(err){ alert('Failed: '+err.message); }
-      } else {
-        try { await recordDecision(c.id, cur === d ? null : d); } catch(err){ alert('Failed: '+err.message); }   // toggle off if same
+      if (d === 'revise'){                                         // reveal an inline note box (no native prompt)
+        const form = card.querySelector('.cdec-revform'); const open = form.style.display !== 'none';
+        form.style.display = open ? 'none' : 'block';
+        if (!open){ const t = form.querySelector('.cdec-revt'); t.value = cur === 'revise' ? ((review.comments.find(x=>x.id===c.id)||{}).decision_note || '') : ''; t.focus(); }
+        return;
       }
+      try { await recordDecision(c.id, cur === d ? null : d); } catch(err){ alert('Failed: '+err.message); }   // toggle off if same
     });
+    card.querySelector('.cdec-revsend')?.addEventListener('click', async e => { e.stopPropagation();
+      const note = card.querySelector('.cdec-revt').value.trim();
+      try { await recordDecision(c.id, 'revise', note); } catch(err){ alert('Failed: '+err.message); } });
+    card.querySelector('.cdec-revcancel')?.addEventListener('click', e => { e.stopPropagation(); card.querySelector('.cdec-revform').style.display = 'none'; });
     card.querySelector('.cunq')?.addEventListener('click', async e => { e.stopPropagation();
       try { await unqueueComment(c.id); } catch(err){ alert('Failed: '+err.message); } });
     const ro = card.querySelector('.creply-open');
