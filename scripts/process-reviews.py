@@ -483,8 +483,9 @@ def _gather_comments(data, ch, include_resolved=True, reviewers=None):
                     continue
                 if c.get("resolution") and not include_resolved:
                     continue
+                anc = c.get("anchor") or {}
                 out.append({"author": name, "date": c.get("created_ts"),
-                            "quote": (c.get("anchor") or {}).get("quote", ""), "body": c.get("body", ""),
+                            "quote": anc.get("quote", ""), "body": c.get("body", ""), "section": anc.get("section", ""), "figure": anc.get("figure"),
                             "edit": c.get("edit"), "resolution": c.get("resolution"), "kind": c.get("kind", "text")})
     rev = load(review_path(data, ch), {"comments": []})
     for c in rev.get("comments", []):
@@ -494,8 +495,9 @@ def _gather_comments(data, ch, include_resolved=True, reviewers=None):
             continue
         if c.get("resolution") and not include_resolved:
             continue
+        anc = c.get("anchor") or {}
         out.append({"author": AUTHOR_NAME, "date": c.get("created_ts"),
-                    "quote": (c.get("anchor") or {}).get("quote", ""), "body": c.get("body", ""),
+                    "quote": anc.get("quote", ""), "body": c.get("body", ""), "section": anc.get("section", ""), "figure": anc.get("figure"),
                     "edit": c.get("edit"), "resolution": c.get("resolution"), "kind": c.get("kind", "text")})
     return out
 
