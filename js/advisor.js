@@ -361,7 +361,7 @@ function showPopover(anchor,rects,defaultTag='wording',figEl=null){
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
   read.appendChild(pop);
   let tag=defaultTag, mode='note'; const tr=pop.querySelector('#tags');
-  TAGS.forEach(t=>{ const b=document.createElement('button'); b.textContent=t; const pick=()=>{ tag=t; [...tr.children].forEach(x=>{x.className='';x.style.background='transparent';x.style.color='var(--text-2)';x.style.borderColor='var(--border)';}); b.className='on'; b.style.background='var(--accent-bg)'; b.style.color='var(--accent)'; b.style.borderColor='transparent'; }; b.onclick=pick; tr.appendChild(b); if(t===defaultTag) pick(); });
+  TAGS.forEach(t=>{ const b=document.createElement('button'); b.textContent=t; const pick=()=>{ tag=t; [...tr.children].forEach(x=>{x.className='';x.style.background='transparent';x.style.color='var(--text-2)';x.style.borderColor='var(--border)';}); b.className='on'; b.style.background=`var(--${t}-bg)`; b.style.color=`var(--${t})`; b.style.borderColor='transparent'; }; b.onclick=pick; tr.appendChild(b); if(t===defaultTag) pick(); });
   const repl=pop.querySelector('#crepl'), body=pop.querySelector('#cbody'), saveBtn=pop.querySelector('#csave');
   const setMode=m=>{ mode=m; pop.querySelectorAll('#pmodes button').forEach(b=>b.classList.toggle('on',b.dataset.m===m)); const nr=m==='replace'||m==='insert'; repl.style.display=nr?'block':'none';
     repl.placeholder=m==='replace'?'Exact replacement text (verbatim)…':'Exact text to insert after the selection (verbatim)…'; body.placeholder=m==='note'?`Leave a comment…  (⌥1–6 to tag · ${MOD}↵ to save)`:'Optional note for this edit…';
@@ -546,9 +546,14 @@ function commentAction(id,act){ const c=review.comments.find(x=>x.id===id); if(!
   markDirty(); renderComments(); buildNav(); paintHighlights(); }
 function editCard(c){ const w=document.createElement('div');
   w.innerHTML=`<textarea id="ebody" style="width:100%;border:.5px solid var(--accent);border-radius:6px;padding:7px;font:inherit;background:var(--bg);color:var(--text);min-height:54px;outline:none">${escapeHtml(c.body)}</textarea>
+    <div id="etags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary" id="esave" style="padding:5px 13px;font-size:12px">Save</button><button class="btn" id="ecancel" style="padding:5px 13px;font-size:12px">Cancel</button></div>`;
+  let etag=c.tag; const tr=w.querySelector('#etags');                       // re-tag from the edit card, per-tag colored like the owner
+  TAGS.forEach(t=>{ const b=document.createElement('button'); b.textContent=t; b.style.cssText='font-size:11.5px;padding:3px 11px;border-radius:20px;border:.5px solid var(--border);background:transparent;color:var(--text-2);cursor:pointer';
+    const pick=()=>{ etag=t; [...tr.children].forEach(x=>{x.style.background='transparent';x.style.color='var(--text-2)';x.style.borderColor='var(--border)';}); b.style.background=`var(--${t}-bg)`; b.style.color=`var(--${t})`; b.style.borderColor='transparent'; };
+    b.onclick=pick; tr.appendChild(b); if(t===c.tag) pick(); });
   w.querySelector('#ecancel').onclick=()=>{ editingId=null; renderComments(); };
-  w.querySelector('#esave').onclick=()=>{ review=updateComment(review,c.id,{body:w.querySelector('#ebody').value}); editingId=null; markDirty(); renderComments(); buildNav(); paintHighlights(); }; return w; }
+  w.querySelector('#esave').onclick=()=>{ review=updateComment(review,c.id,{body:w.querySelector('#ebody').value, tag:etag}); editingId=null; markDirty(); renderComments(); buildNav(); paintHighlights(); }; return w; }
 // robust anchor location: a stored quote rarely byte-matches rendered HTML (injected
 // "Figure 3.9." prefixes, KaTeX math, citation brackets, curly quotes/dashes).
 function normText(s){ return (s||'').replace(/ /g,' ').normalize('NFKD')
