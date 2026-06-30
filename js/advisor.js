@@ -348,14 +348,14 @@ function showPopover(anchor,rects,defaultTag='wording',figEl=null){
     <div class="snip" id="psnip">"${escapeHtml(anchor.quote.slice(0,150))}"</div>${modes}
     ${isFig&&figEl?`<button class="btn figdraw-btn" id="figdraw"><i class="ti ti-pencil"></i>Draw on the figure</button>`:''}
     <textarea id="crepl" class="crepl" style="display:none"></textarea><div class="tags" id="tags"></div>
-    <textarea id="cbody" placeholder="Leave a comment…"></textarea>
+    <textarea id="cbody" placeholder="Leave a comment…  (⌥1–5 to tag · ${MOD}↵ to save)"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
   read.appendChild(pop);
   let tag=defaultTag, mode='note'; const tr=pop.querySelector('#tags');
   TAGS.forEach(t=>{ const b=document.createElement('button'); b.textContent=t; const pick=()=>{ tag=t; [...tr.children].forEach(x=>{x.className='';x.style.background='transparent';x.style.color='var(--text-2)';x.style.borderColor='var(--border)';}); b.className='on'; b.style.background='var(--accent-bg)'; b.style.color='var(--accent)'; b.style.borderColor='transparent'; }; b.onclick=pick; tr.appendChild(b); if(t===defaultTag) pick(); });
   const repl=pop.querySelector('#crepl'), body=pop.querySelector('#cbody'), saveBtn=pop.querySelector('#csave');
   const setMode=m=>{ mode=m; pop.querySelectorAll('#pmodes button').forEach(b=>b.classList.toggle('on',b.dataset.m===m)); const nr=m==='replace'||m==='insert'; repl.style.display=nr?'block':'none';
-    repl.placeholder=m==='replace'?'Exact replacement text…':'Exact text to insert after the selection…'; body.placeholder=m==='note'?'Leave a comment…':'Optional note for this edit…';
+    repl.placeholder=m==='replace'?'Exact replacement text (verbatim)…':'Exact text to insert after the selection (verbatim)…'; body.placeholder=m==='note'?`Leave a comment…  (⌥1–5 to tag · ${MOD}↵ to save)`:'Optional note for this edit…';
     saveBtn.textContent=m==='note'?'Comment':m==='delete'?'Suggest deletion':m==='insert'?'Suggest insertion':'Suggest replacement'; saveBtn.className='btn '+(m==='delete'?'btn-danger':m==='note'?'btn-primary':'btn-suggest');
     pop.querySelector('#psnip').style.textDecoration=m==='delete'?'line-through':'none'; (nr?repl:body).focus(); };
   pop.querySelectorAll('#pmodes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m)); body.focus();
@@ -463,7 +463,7 @@ function _railFilterSort(active){
 }
 function suggHtml(c){ if(!c.edit) return ''; const e=c.edit, find=escapeHtml((e.find||'').slice(0,140)), repl=escapeHtml((e.replacement||'').slice(0,240));
   const label=e.op==='replace'?'Replace':e.op==='insert'?'Insert after':'Delete'; const inner=e.op==='delete'?`<del>${find}</del>`:e.op==='insert'?`<span style="color:var(--text-3)">…${find}</span> <ins>${repl}</ins>`:`<del>${find}</del> <ins>${repl}</ins>`;
-  return `<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${label}</div>${inner}</div>`; }
+  return `<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${label} · verbatim</div>${inner}</div>`; }
 function resolHtml(c){ if(!c.resolution) return ''; const r=c.resolution;
   const label=r.state==='addressed'?'Addressed':r.state==='declined'?'Kept as written':'Noted';
   const icon=r.state==='addressed'?'circle-check':r.state==='declined'?'circle-x':'info-circle';
@@ -501,7 +501,7 @@ function renderComments(){
   const archived=review.comments.filter(_isArchived);
   const open=active.filter(c=>c.status==='open').length;
   pane.innerHTML=`<div class="lbl">MY COMMENTS<span style="margin-left:auto">${active.length} active${open?` · ${open} open`:''}</span></div>`;
-  if(!review.comments.length){ pane.innerHTML+=`<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text or click a figure to leave a comment or suggest an edit.</div>`; return; }
+  if(!review.comments.length){ pane.innerHTML+=`<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text or click a figure to leave a comment.</div>`; return; }
   // filter / sort toolbar (acts on the ACTIVE list only)
   if(active.length){
     const f=_railFilter;
@@ -517,7 +517,7 @@ function renderComments(){
   }
   const shown=_railFilterSort(active);
   shown.forEach(c=>pane.appendChild(_buildCard(c)));
-  if(active.length && !shown.length){ pane.insertAdjacentHTML('beforeend',`<div class="cempty">No comments match.</div>`); }
+  if(active.length && !shown.length){ pane.insertAdjacentHTML('beforeend',`<div class="cempty">No comments match this filter.</div>`); }
   if(!active.length && archived.length){ pane.insertAdjacentHTML('beforeend',`<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">All your comments here have been addressed by the author.</div>`); }
   if(archived.length){
     const grp=document.createElement('div'); grp.style.marginTop='10px';
