@@ -85,7 +85,7 @@ const fmtDate = ts => { if(!ts) return ''; const d=new Date(ts); if(isNaN(d)) re
 const read = document.getElementById('read');
 let current = null, review = null, released = [], responsesReleased = false;
 const tok = () => localStorage.getItem('ghpat');
-let keyBad = false;
+let keyBad = false, revoked = false;
 const is401 = e => /\b401\b/.test((e && e.message) || '');
 function showKeyExpired(){
   document.getElementById('nav').style.display = 'none';
@@ -96,6 +96,14 @@ function showKeyExpired(){
     <div style="font-size:13px;line-height:1.6;margin-bottom:16px;max-width:430px">Access keys are time-limited for security. Please request a fresh key, then enter it below to pick up where you left off — your comments are saved.</div>
     <button class="btn btn-primary" id="newkey">Enter a new key</button></div>`;
   read.querySelector('#newkey').onclick = () => { const v = prompt('New access key:'); if (v && v.trim()){ localStorage.setItem('ghpat', v.trim()); keyBad = false; boot(); } };
+}
+function showRevoked(){
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('comments').style.display = 'none';
+  document.getElementById('topbar').innerHTML = `<strong style="font-size:16px;font-weight:600">Dissertation review</strong>`;
+  read.innerHTML = `<div class="empty" style="max-width:460px;margin:12vh auto;text-align:center"><i class="ti ti-lock-off" style="font-size:26px;color:var(--text-3)"></i>
+    <div style="font-size:17px;font-weight:500;margin:10px 0 6px">This review link is no longer active</div>
+    <div style="font-size:13px;line-height:1.6;color:var(--text-3)">Access for this reviewer has been removed by the author. If you think this is a mistake, please contact them for a new invitation.</div></div>`;
 }
 const reviewPath = ch => `advisor/${effId()}/${ch}.json`;
 const localKey = ch => `adv:${effId()}:${ch}`;
@@ -176,7 +184,8 @@ async function loadRelease(){
   try { const r = await fetch(`https://api.github.com/repos/${DATA_REPO}/contents/release.json?t=${Date.now()}`,{ headers:{ Authorization:`Bearer ${t}`, Accept:'application/vnd.github.raw' }, cache:'no-store' });
     if (r.status === 401){ keyBad = true; return; }
     if (r.ok) apply(await r.json()); } catch(e){ released = []; }
-  function apply(j){ released = (j?.[RELEASE_ID]?.released) || []; responsesReleased = !!(j?.[RELEASE_ID]?.responses_released); }
+  function apply(j){ if (j && typeof j === 'object' && !(RELEASE_ID in j)){ revoked = true; return; }   // no gate entry → this reviewer was removed
+    released = (j?.[RELEASE_ID]?.released) || []; responsesReleased = !!(j?.[RELEASE_ID]?.responses_released); }
 }
 async function loadChapter(ch){
   current = ch; review = loadLocal(ch);
@@ -1029,7 +1038,7 @@ function setupMobileSheet(){
   document.body.append(back, fab);
 }
 // ---------- boot ----------
-async function boot(){ keyBad = false; await loadRelease(); if (keyBad && tok()){ showKeyExpired(); return; }
+async function boot(){ keyBad = false; revoked = false; await loadRelease(); if (revoked){ showRevoked(); return; } if (keyBad && tok()){ showKeyExpired(); return; }
   if (SHARED && tok() && !reviewerName()){ showNameEntry(); return; } enterHome();
   startOutbox(); retryPending(); renderBanner(); }
 // outbox heartbeat: retry any unconfirmed local edits on a timer, when the tab regains focus,
