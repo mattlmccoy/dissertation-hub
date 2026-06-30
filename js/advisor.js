@@ -73,6 +73,9 @@ const chMeta = id => CHAPTERS.find(c => c.id === id) || (id === '__outline__' ? 
 const TAGS = ['suggestion','wording','question','clarity','citation'];
 const shortTitle = t => { const s = t.split(':')[0].trim(); return s.length <= 34 ? s : s.slice(0,34).replace(/\s\S*$/,'') + '…'; };
 const escapeHtml = s => (s||'').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+// platform-adaptive modifier label (handlers accept ⌘ or Ctrl; this is just the on-screen text)
+const IS_MAC = /Mac|iPhone|iPad/.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''));
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 const fmtDate = ts => { if(!ts) return ''; const d=new Date(ts); if(isNaN(d)) return ''; return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); };
 
 const read = document.getElementById('read');
@@ -336,6 +339,7 @@ function showPopover(anchor,rects,defaultTag='wording',figEl=null){
   pop.querySelectorAll('#pmodes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m)); body.focus();
   pop.querySelector('#ccancel').onclick=()=>{ pop.remove(); window.getSelection().removeAllRanges(); };
   pop.querySelector('#figdraw')?.addEventListener('click',()=>{ pop.remove(); openFigureMarkup(figEl,anchor); });
+  pop._commit=()=>saveBtn.click(); pop._pickTag=i=>{ const b=tr.children[i]; if(b) b.click(); };
   saveBtn.onclick=()=>{ let edit=null;
     if(mode==='replace') edit={op:'replace',find:anchor.quote,replacement:repl.value};
     else if(mode==='insert') edit={op:'insert',find:anchor.quote,position:'after',replacement:repl.value};
@@ -1013,6 +1017,48 @@ function showNameEntry(){
   read.querySelector('#rname').focus();
 }
 setupMobileSheet();
-window.addEventListener('keydown',e=>{ const pop=document.getElementById('pop'); if(pop){ if(e.key==='Escape') pop.querySelector('#ccancel').click(); return; }
-  if(/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')) return; if(e.key==='/'){ e.preventDefault(); document.getElementById('search')?.focus(); } });
+// ---------- panes / focus / keyboard (reading ergonomics) ----------
+function toggleNav(){ const n=document.getElementById('nav'); if(n) n.style.display=n.style.display==='none'?'':'none'; }
+function toggleRail(){ const c=document.getElementById('comments'); if(c) c.style.display=c.style.display==='none'?'':'none'; }
+function toggleFocus(){ document.body.classList.toggle('focusmode'); flash(document.body.classList.contains('focusmode')?'Focus mode on — press f to exit':'Focus mode off'); }
+// move a current-index pointer over the VISIBLE active comments (rail filter/sort order), jump + activate
+function cycleComment(dir){
+  const active=review.comments.filter(c=>!_isArchived(c));
+  const list=_railFilterSort(active); if(!list.length) return;
+  let i=list.findIndex(c=>c.id===activeId);
+  i = i<0 ? (dir>0?0:list.length-1) : (i+dir+list.length)%list.length;
+  const c=list[i]; jumpTo(c); activateComment(c.id); }
+const SHORTCUTS=[['j / k','next / previous comment'],['↵ on a comment','jump to its place in the text'],['f','focus (distraction-free) mode'],['[ / ]','collapse left nav / comments rail'],['/','search this chapter'],['Esc','close popover / overlay'],[`${MOD}↵ (in popover)`,'save the comment'],['⌥1–5 (in popover)','pick a tag'],['?','show this help']];
+function toggleHelp(){
+  const ex=document.getElementById('helpov'); if(ex){ ex.remove(); return; }
+  const ov=document.createElement('div'); ov.id='helpov';
+  ov.innerHTML=`<div class="help-card"><div class="help-h">Keyboard shortcuts</div>
+    ${SHORTCUTS.map(([k,d])=>`<div class="help-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
+    <div style="text-align:right;margin-top:14px"><button class="btn" id="help-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#help-x').onclick=()=>ov.remove();
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+}
+window.addEventListener('keydown',e=>{
+  const pop=document.getElementById('pop');
+  if(pop){
+    if(e.key==='Escape'){ pop.querySelector('#ccancel').click(); return; }
+    if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){ e.preventDefault(); pop._commit(); return; }
+    if(e.altKey&&e.key>='1'&&e.key<='5'){ e.preventDefault(); pop._pickTag(+e.key-1); return; }
+    return;
+  }
+  if(document.getElementById('helpov')&&e.key==='Escape'){ toggleHelp(); return; }
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||'')||document.activeElement?.isContentEditable;
+  if(typing){ if(e.key==='Escape') document.activeElement.blur(); return; }
+  switch(e.key){
+    case 'j': e.preventDefault(); cycleComment(1); break;
+    case 'k': e.preventDefault(); cycleComment(-1); break;
+    case 'Enter': { const c=review.comments.find(x=>x.id===activeId); if(c){ e.preventDefault(); jumpTo(c); } break; }
+    case 'f': toggleFocus(); break;
+    case '[': toggleNav(); break;
+    case ']': toggleRail(); break;
+    case '/': e.preventDefault(); document.getElementById('search')?.focus(); break;
+    case '?': toggleHelp(); break;
+  }
+});
 boot();
