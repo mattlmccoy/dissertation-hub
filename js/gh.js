@@ -1,13 +1,15 @@
 export const reviewPath = ch => `reviews/${ch}.json`;
 export const mergeReview = (local, remote) => {
-  if (!remote) return local; const byId = Object.fromEntries((remote.comments||[]).map(c=>[c.id,c]));
-  const comments = (local.comments||[]).map(lc => { const rc = byId[lc.id];
+  if (!remote) return local;
+  const deleted = new Set([ ...((local.deleted)||[]), ...((remote.deleted)||[]) ]);   // tombstones: never resurrect a deleted comment
+  const byId = Object.fromEntries((remote.comments||[]).map(c=>[c.id,c]));
+  const comments = (local.comments||[]).filter(lc => !deleted.has(lc.id)).map(lc => { const rc = byId[lc.id];
     return rc ? { ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution } : lc; });
-  // include remote-only comments (e.g. created on another machine)
-  for (const rc of remote.comments||[]) if (!comments.find(c=>c.id===rc.id)) comments.push(rc);
+  // include remote-only comments (e.g. created on another machine), but not ones tombstoned on either side
+  for (const rc of remote.comments||[]) if (!deleted.has(rc.id) && !comments.find(c=>c.id===rc.id)) comments.push(rc);
   // read-state is app-owned; union so a section checked on any device stays checked
   const read = { ...(remote.read||{}), ...(local.read||{}) };
-  return { ...remote, ...local, comments, read, secCount: local.secCount || remote.secCount };
+  return { ...remote, ...local, comments, read, secCount: local.secCount || remote.secCount, ...(deleted.size?{deleted:[...deleted]}:{}) };
 };
 const API='https://api.github.com', OWNER='mattlmccoy', REPO='dissertation-tracker-data';
 const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.github+json' });

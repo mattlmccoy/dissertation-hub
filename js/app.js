@@ -40,17 +40,18 @@ let reviewSha = null, syncTimer = null, scrollSaveT = null;
 const FINAL_STATES = new Set(['merged', 'declined']);
 function reconcileReview(local, remote, preferRemote){
   if (!remote) return local;
+  const deleted = new Set([ ...((local&&local.deleted)||[]), ...((remote.deleted)||[]) ]);  // tombstones: a deleted comment is never resurrected by a sync
   const byId = Object.fromEntries((remote.comments||[]).map(c => [c.id, c]));
   const adopt = (lc, rc) => ({ ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution });
-  const comments = (local.comments||[]).map(lc => {
+  const comments = (local.comments||[]).filter(lc => !deleted.has(lc.id)).map(lc => {
     const rc = byId[lc.id]; if (!rc) return lc;
     if (FINAL_STATES.has(rc.status) && !FINAL_STATES.has(lc.status)) return adopt(lc, rc);   // server finalized it (e.g. merged) — adopt, never downgrade
     if (FINAL_STATES.has(lc.status) && !FINAL_STATES.has(rc.status)) return lc;              // local finalized — keep; a working remote can't undo a merge
     if (preferRemote) return adopt(lc, rc);                                                  // syncDown: server is the source of truth for every working state
     return lc;                                                                               // syncUp: keep the owner's local intent (approve/unqueue/reply)
   });
-  for (const rc of remote.comments||[]) if (!comments.find(c => c.id === rc.id)) comments.push(rc);
-  return { ...local, comments };
+  for (const rc of remote.comments||[]) if (!deleted.has(rc.id) && !comments.find(c => c.id === rc.id)) comments.push(rc);
+  return { ...local, comments, ...(deleted.size ? { deleted:[...deleted] } : {}) };
 }
 async function syncDown(){
   const t = tok(); if (!t) return;

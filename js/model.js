@@ -13,7 +13,7 @@ export const addComment = (r, c) => ({ ...r, comments:[...r.comments, {
 export const updateComment = (r, id, patch) =>
   ({ ...r, comments:r.comments.map(c => c.id===id ? { ...c, ...patch } : c) });
 export const deleteComment = (r, id) =>
-  ({ ...r, comments:r.comments.filter(c => c.id!==id) });
+  ({ ...r, comments:r.comments.filter(c => c.id!==id), deleted:[...new Set([...(r.deleted||[]), id])] });
 export const setCursor = (r, cursor) => ({ ...r, cursor });
 
 // owner decision on a staged edit: 'approve' | 'reject' | 'revise' | null (clear)
