@@ -412,6 +412,29 @@ function loadMarkupThumb(el, path){
 
 // ---------- comments rail ----------
 let editingId=null, activeId=null, _railResolvedOpen=false;
+// rail filter/sort state for the ACTIVE comment list (persists across re-renders)
+let _railFilter={ q:'', kind:'all', sort:'doc' };
+// map comment id -> vertical position of its mark/anchor in the rendered doc
+function _railDocOrder(){
+  const map={}; const order=[...document.querySelectorAll('#doc .cmark[data-id], #doc figure[data-cid]')];
+  order.forEach((el,i)=>{ const id=el.dataset.id||el.dataset.cid; if(id!=null && !(id in map)) map[id]=i; });
+  return map;
+}
+// filter ACTIVE comments by search + kind, then sort by doc order or newest-first
+function _railFilterSort(active){
+  const f=_railFilter, q=f.q.trim().toLowerCase();
+  let cs=active.filter(c=>{
+    if(f.kind==='figure' && c.kind!=='figure') return false;
+    if(f.kind==='suggestion' && c.kind!=='suggestion') return false;
+    if(!q) return true;
+    const hay=((c.body||'')+' '+(c.anchor&&c.anchor.quote||'')).toLowerCase();
+    return hay.includes(q);
+  });
+  if(f.sort==='new') cs=[...cs].sort((a,b)=>(b.created_ts||'').localeCompare(a.created_ts||''));
+  else { const ord=_railDocOrder(); const pos=c=>(c.id in ord)?ord[c.id]:1e6;
+    cs=[...cs].sort((a,b)=>(pos(a)-pos(b))||(a.created_ts||'').localeCompare(b.created_ts||'')); }
+  return cs;
+}
 function suggHtml(c){ if(!c.edit) return ''; const e=c.edit, find=escapeHtml((e.find||'').slice(0,140)), repl=escapeHtml((e.replacement||'').slice(0,240));
   const label=e.op==='replace'?'Replace':e.op==='insert'?'Insert after':'Delete'; const inner=e.op==='delete'?`<del>${find}</del>`:e.op==='insert'?`<span style="color:var(--text-3)">…${find}</span> <ins>${repl}</ins>`:`<del>${find}</del> <ins>${repl}</ins>`;
   return `<div class="sugg"><div class="op"><i class="ti ti-pencil"></i>Suggested ${label}</div>${inner}</div>`; }
@@ -453,7 +476,22 @@ function renderComments(){
   const open=active.filter(c=>c.status==='open').length;
   pane.innerHTML=`<div class="lbl">MY COMMENTS<span style="margin-left:auto">${active.length} active${open?` · ${open} open`:''}</span></div>`;
   if(!review.comments.length){ pane.innerHTML+=`<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">Select text or click a figure to leave a comment or suggest an edit.</div>`; return; }
-  active.forEach(c=>pane.appendChild(_buildCard(c)));
+  // filter / sort toolbar (acts on the ACTIVE list only)
+  if(active.length){
+    const f=_railFilter;
+    const bar=document.createElement('div'); bar.className='cbar';
+    bar.innerHTML=`<input class="csel" id="rfq" type="search" placeholder="Search comments" value="${escapeHtml(f.q)}" style="flex:2">
+      <select class="csel" id="rfkind"><option value="all"${f.kind==='all'?' selected':''}>all kinds</option><option value="figure"${f.kind==='figure'?' selected':''}>figures</option><option value="suggestion"${f.kind==='suggestion'?' selected':''}>suggestions</option></select>
+      <button class="csort" id="rfsort" title="Sort">${f.sort==='doc'?'↓ document':'↓ newest'}</button>`;
+    pane.appendChild(bar);
+    const qel=bar.querySelector('#rfq');
+    qel.oninput=e=>{ _railFilter.q=e.target.value; renderComments(); const n=document.getElementById('rfq'); if(n){ n.focus(); const v=n.value.length; n.setSelectionRange(v,v); } };
+    bar.querySelector('#rfkind').onchange=e=>{ _railFilter.kind=e.target.value; renderComments(); };
+    bar.querySelector('#rfsort').onclick=()=>{ _railFilter.sort=_railFilter.sort==='doc'?'new':'doc'; renderComments(); };
+  }
+  const shown=_railFilterSort(active);
+  shown.forEach(c=>pane.appendChild(_buildCard(c)));
+  if(active.length && !shown.length){ pane.insertAdjacentHTML('beforeend',`<div class="cempty">No comments match.</div>`); }
   if(!active.length && archived.length){ pane.insertAdjacentHTML('beforeend',`<div style="font-size:12.5px;color:var(--text-3);padding:8px 2px">All your comments here have been addressed by the author.</div>`); }
   if(archived.length){
     const grp=document.createElement('div'); grp.style.marginTop='10px';
