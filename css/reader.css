@@ -136,6 +136,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;pad
 #doc mark.cmark[data-tag=wording]{background:color-mix(in srgb,var(--wording) 22%,transparent)}
 #doc mark.cmark[data-tag=citation]{background:color-mix(in srgb,var(--citation) 16%,transparent)}
 #doc mark.cmark[data-tag=question]{background:color-mix(in srgb,var(--question) 20%,transparent)}
+#doc mark.cmark[data-tag=suggestion]{background:color-mix(in srgb,var(--suggestion) 18%,transparent)}
+#doc mark.cmark[data-tag=clarity]{background:color-mix(in srgb,var(--clarity) 18%,transparent)}
 #doc mark.cmark.cmark-hot{outline:1.5px solid var(--accent);outline-offset:1px}
 #doc .cmark-el{border-left:2px solid var(--mk,var(--accent));padding-left:10px;margin-left:-12px;cursor:pointer}
 #doc figure.fig-commentable{cursor:pointer;border-radius:var(--r-sm);transition:box-shadow .12s} #doc img{cursor:pointer}

@@ -480,7 +480,7 @@ function _buildCard(c){
   const st=c.status; const resolved=st==='resolved'; const submitted=st==='submitted';
   const stBadge = resolved ? '<span class="status" style="color:var(--text-3)">resolved</span>'
     : submitted ? '<span class="status" style="background:var(--success-bg);color:var(--success)">submitted</span>' : '<span class="status" style="display:none"></span>';
-  card.innerHTML=`<div class="row"><span class="chip" style="background:var(--accent-bg);color:var(--accent)">${c.kind==='figure'?'<i class="ti ti-photo" style="font-size:11px;margin-right:2px"></i>':c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:11px;margin-right:2px"></i>':''}${c.tag}</span>
+  card.innerHTML=`<div class="row"><span class="chip" style="background:var(--${c.tag}-bg);color:var(--${c.tag})">${c.kind==='figure'?'<i class="ti ti-photo" style="font-size:11px;margin-right:2px"></i>':c.kind==='suggestion'?'<i class="ti ti-pencil" style="font-size:11px;margin-right:2px"></i>':''}${c.tag}</span>
       <span class="cactions" style="margin-left:auto;display:none;gap:1px">
         <button class="icbtn cact" data-act="resolve" title="${resolved?'Reopen':'Resolve'}" style="width:25px;height:25px;font-size:14px"><i class="ti ti-${resolved?'rotate-clockwise':'check'}"></i></button>
         <button class="icbtn cact" data-act="edit" title="Edit" style="width:25px;height:25px;font-size:14px"><i class="ti ti-pencil"></i></button>
@@ -647,7 +647,7 @@ function paintHighlights(){ const doc=document.getElementById('doc'); if(!doc) r
     const q=(c.anchor.quote||'').replace(/\s+/g,' ').trim(); if(q.length<4) return; const needle=q.slice(0,50); const el=blocks.find(b=>b.txt.includes(needle.slice(0,40)))?.el; if(!el) return; wrapInNode(el,needle,c); }); }
 function wrapInNode(el,needle,c){ const tw=document.createTreeWalker(el,NodeFilter.SHOW_TEXT); let node, probe=needle.slice(0,30);
   while((node=tw.nextNode())){ const idx=node.nodeValue.indexOf(probe); if(idx>=0){ const r=document.createRange(); r.setStart(node,idx); r.setEnd(node,Math.min(node.nodeValue.length,idx+needle.length));
-    const mk=document.createElement('mark'); mk.className='cmark'; mk.dataset.id=c.id; mk.dataset.tag='wording'; if(c.edit) mk.dataset.sugg=c.edit.op; try{ r.surroundContents(mk); mk.onclick=e=>{ e.stopPropagation(); activateComment(c.id); }; return true; }catch(e){ return false; } } } return false; }
+    const mk=document.createElement('mark'); mk.className='cmark'; mk.dataset.id=c.id; mk.dataset.tag=c.tag; if(c.edit) mk.dataset.sugg=c.edit.op; try{ r.surroundContents(mk); mk.onclick=e=>{ e.stopPropagation(); activateComment(c.id); }; return true; }catch(e){ return false; } } } return false; }
 
 // ---------- top bar / home / search ----------
 function renderTopbar(){ const m=chMeta(current);
