@@ -734,12 +734,30 @@ async function listExports(){
   return (Array.isArray(json)?json:[]).filter(j=>j.type==='export' && j.requested_by===effId())
     .sort((a,b)=>(b.requested_ts||'').localeCompare(a.requested_ts||''));
 }
+function exportPick(anchorBtn){
+  document.getElementById('exppick')?.remove();
+  const list=(released||[]).filter(id=>id!=='__outline__');
+  const items=list.map(id=>{ const m=chMeta(id); return `<div data-ch="${id}" class="exppick-it" style="padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px"><span style="color:var(--text-3);min-width:18px;display:inline-block">${m.n}</span> ${shortTitle(m.title)}</div>`; }).join('')||`<div style="padding:10px;color:var(--text-3);font-size:12.5px">No chapters released yet.</div>`;
+  const pop=document.createElement('div'); pop.id='exppick';
+  pop.style.cssText='position:fixed;z-index:85;background:var(--bg);border:.5px solid var(--border-2);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;min-width:252px;max-height:60vh;overflow:auto';
+  const r=anchorBtn.getBoundingClientRect(); pop.style.top=(r.bottom+6)+'px'; pop.style.left=Math.max(8,Math.min(r.left,window.innerWidth-264))+'px';
+  pop.innerHTML=`<div style="font-size:10.5px;letter-spacing:.05em;color:var(--text-3);padding:4px 10px 6px">EXPORT WHICH CHAPTER?</div>`+items;
+  document.body.appendChild(pop);
+  pop.querySelectorAll('[data-ch]').forEach(d=>{ d.onmouseenter=()=>d.style.background='var(--accent-bg)'; d.onmouseleave=()=>d.style.background=''; d.onclick=()=>{ pop.remove(); exportDialog(d.dataset.ch); }; });
+  setTimeout(()=>document.addEventListener('click',function h(e){ if(!pop.contains(e.target)&&e.target!==anchorBtn){ pop.remove(); document.removeEventListener('click',h); } }),0);
+}
 async function renderAdvisorDownloads(){
   const box=document.getElementById('adv-downloads'); if(!box) return;
   const jobs=await listExports();
-  if(!jobs.length){ box.innerHTML=''; return; }
+  const header=`<div style="display:flex;align-items:center;gap:10px;margin:24px 0 13px">
+      <div style="font-size:11px;letter-spacing:.06em;color:var(--text-3)">DOWNLOADS</div>
+      <button class="btn" id="adv-export-btn" style="margin-left:auto;padding:5px 11px;font-size:12px"><i class="ti ti-file-export"></i>Export a chapter…</button></div>`;
+  if(!jobs.length){
+    box.innerHTML=header+`<div style="font-size:12.5px;color:var(--text-3);line-height:1.6">No downloads yet. Use <strong>Export a chapter…</strong> above (or the export icon inside any chapter) to download it as Word, Markdown, or PDF with your comments.</div>`;
+    box.querySelector('#adv-export-btn').onclick=e=>exportPick(e.currentTarget); return;
+  }
   const groups={}; for(const j of jobs){ (groups[j.chapter] ||= []).push(j); }
-  box.innerHTML=`<div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);margin:24px 0 13px">DOWNLOADS</div>`+Object.keys(groups).map(scope=>{
+  box.innerHTML=header+Object.keys(groups).map(scope=>{
     const list=groups[scope]; const m=chMeta(scope);
     const name=scope==='__outline__'?'Proposed outline':`Chapter ${m.n} · ${shortTitle(m.title)}`;
     const pending=list.filter(j=>j.status!=='done').length; const open=_expOpen.has(scope);
@@ -751,6 +769,7 @@ async function renderAdvisorDownloads(){
     }).join('');
     return `<div style="border:.5px solid var(--border);border-radius:10px;padding:4px 12px 6px;margin-bottom:10px"><button class="dl-grp-h" data-scope="${escapeHtml(scope)}" style="display:flex;align-items:center;gap:7px;width:100%;background:none;border:none;cursor:pointer;font:inherit;color:var(--text);padding:8px 0"><i class="ti ti-chevron-${open?'down':'right'}"></i><span style="font-size:13px">${name}</span><span style="margin-left:auto;color:var(--text-3);font-size:11.5px">${list.length} version${list.length>1?'s':''}${pending?` · ${pending} building`:''}</span></button><div style="display:${open?'block':'none'}">${versions}</div></div>`;
   }).join('');
+  box.querySelector('#adv-export-btn').onclick=e=>exportPick(e.currentTarget);
   box.querySelectorAll('.dl-grp-h').forEach(h=>h.onclick=()=>{ const s=h.dataset.scope; _expOpen.has(s)?_expOpen.delete(s):_expOpen.add(s); renderAdvisorDownloads(); });
   box.querySelectorAll('.dl-get').forEach(b=>b.onclick=()=>downloadArtifact(b.dataset.path));
 }
