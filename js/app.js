@@ -1833,11 +1833,15 @@ async function openReleasePanel(){
             <div style="font-size:11.5px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(a.email||'')}</div></div>
           <span style="margin-left:auto"></span>${status}
           <button class="btn adv-copy" data-id="${escapeHtml(a.id)}" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-link"></i>Copy link</button>
-          ${a.email?`<button class="btn adv-resend" data-id="${escapeHtml(a.id)}" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-mail-forward"></i>Resend</button>`:''}</div>`;
+          ${a.email?`<button class="btn adv-resend" data-id="${escapeHtml(a.id)}" style="padding:3px 9px;font-size:11.5px"><i class="ti ti-mail-forward"></i>Resend</button>`:''}
+          <button class="adv-del" data-id="${escapeHtml(a.id)}" title="Remove advisor" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--text-3);font-size:13px;opacity:0;transition:opacity .12s"><i class="ti ti-trash"></i></button></div>`;
     }).join('');
+    box.querySelectorAll('.advrow').forEach(row => { row.onmouseenter = () => { const d = row.querySelector('.adv-del'); if (d) d.style.opacity = '.85'; };
+      row.onmouseleave = () => { const d = row.querySelector('.adv-del'); if (d) d.style.opacity = '0'; }; });
     box.querySelectorAll('.adv-copy').forEach(b => b.onclick = () => { const a = advReg.advisors.find(x=>x.id===b.dataset.id);
       navigator.clipboard?.writeText(advisorUrl(a.id, a.name)); flash('Portal link copied.'); });
     box.querySelectorAll('.adv-resend').forEach(b => b.onclick = () => resendInvite(b.dataset.id));
+    box.querySelectorAll('.adv-del').forEach(b => b.onclick = () => removeAdvisor(b.dataset.id));
   };
   const persistAdvisors = async (msg) => { await putJson(t, 'advisors.json', advReg, advSha, msg); };
   const addAdvisor = async () => {
@@ -1866,6 +1870,21 @@ async function openReleasePanel(){
     a.invited = false; a.invited_ts = null; a.invite_error = null;
     try { await persistAdvisors(`advisors: resend invite ${a.name}`); flash('Invite re-queued — it will send shortly.'); renderAdvList(); }
     catch(e){ flash('Failed: ' + e.message); }
+  };
+  // intentionally high-friction: must type the advisor's exact name. Removes them from the list +
+  // release gate (their portal stops showing chapters); their already-submitted comments are kept.
+  const removeAdvisor = async (id) => {
+    const i = advReg.advisors.findIndex(x => x.id === id); if (i < 0) return; const a = advReg.advisors[i];
+    const typed = prompt(`Remove ${a.name}?\n\nThis takes them off your advisor list and revokes their chapter access. Comments they already submitted are kept.\n\nTo confirm, type their full name exactly:`);
+    if (typed === null) return;
+    if (typed.trim() !== a.name.trim()){ flash('Name did not match — advisor not removed.'); return; }
+    const removed = advReg.advisors.splice(i, 1)[0];
+    try {
+      await persistAdvisors(`advisors: remove ${a.name}`);
+      try { const { json:relNow, sha:relSha } = await getJson(t, 'release.json');
+        if (relNow && relNow[id]){ delete relNow[id]; await putJson(t, 'release.json', relNow, relSha, `release: remove ${a.name}`); } } catch(e){}
+      flash(`Removed ${a.name}.`); renderAdvList();
+    } catch(e){ advReg.advisors.splice(i, 0, removed); flash('Failed: ' + e.message); renderAdvList(); }
   };
   document.getElementById('adv-add').onclick = addAdvisor;
   renderAdvList();
