@@ -11,7 +11,7 @@ const addComment = (r, c) => ({ ...r, comments:[...r.comments, {
   anchor:{ quote:c.anchor?.quote||'', rects:c.anchor?.rects||[], section:c.anchor?.section||'', figure:c.anchor?.figure||null, confirmed:!!c.anchor?.confirmed },
   tag:c.tag||'other', body:c.body||'', status:'open', author:c.author||null, edit:c.edit||null, created_ts:new Date().toISOString() }] });
 const updateComment = (r, id, patch) => ({ ...r, comments:r.comments.map(c => c.id===id ? { ...c, ...patch } : c) });
-const deleteComment = (r, id) => ({ ...r, comments:r.comments.filter(c => c.id!==id) });
+const deleteComment = (r, id) => ({ ...r, comments:r.comments.filter(c => c.id!==id), deleted:[...new Set([...(r.deleted||[]), id])] });
 // --- data-repo I/O (self-contained) ---
 const _API='https://api.github.com', _OWNER='mattlmccoy', _REPO='dissertation-tracker-data';
 const _hdr = t => ({ Authorization:`Bearer ${t}`, Accept:'application/vnd.github+json' });
@@ -25,9 +25,11 @@ async function getDataUrl(t, path, mime='image/png'){ const r=await fetch(`${_AP
 // remote wins owner-authoritative fields, local wins reviewer-authoritative fields; thread merged by (author,ts).
 function mergeReviews(remote, local){
   const out = { ...(remote||{}), ...(local||{}) };
+  // deletion tombstones: an id deleted on either side stays deleted — never resurrected by the merge
+  const deleted = new Set([ ...((remote&&remote.deleted)||[]), ...((local&&local.deleted)||[]) ]);
   const rById = Object.fromEntries(((remote&&remote.comments)||[]).map(c=>[c.id,c]));
   const lById = Object.fromEntries(((local&&local.comments)||[]).map(c=>[c.id,c]));
-  const ids = [...new Set([...Object.keys(rById), ...Object.keys(lById)])];
+  const ids = [...new Set([...Object.keys(rById), ...Object.keys(lById)])].filter(id => !deleted.has(id));
   out.comments = ids.map(id => {
     const r = rById[id], l = lById[id];
     if (r && !l) return r;                 // owner-only (e.g. injected) — keep
@@ -39,6 +41,7 @@ function mergeReviews(remote, local){
       body:l.body, edit:l.edit, status:l.status, anchor:l.anchor, kind:l.kind, tag:l.tag, author:l.author, created_ts:l.created_ts||r.created_ts,
       ...(thread.length?{thread}:{}) };
   });
+  if (deleted.size) out.deleted = [...deleted]; else delete out.deleted;  // persist tombstones so deletes survive future syncs
   delete out.pending;                      // pending is a local-only marker, never written to the remote payload
   return out;
 }
@@ -104,9 +107,12 @@ let reviewSha = null, syncTimer = null;
 async function syncDown(){ const t = tok(); if (!t) return;
   try { const { json, sha } = await getJson(t, reviewPath(current)); reviewSha = sha;
     if (json){ const rById = Object.fromEntries((json.comments||[]).map(c=>[c.id,c]));
+      // honor deletion tombstones from both sides so a deleted comment is never pulled back in
+      const deleted = new Set([ ...((review.deleted)||[]), ...((json.deleted)||[]) ]);
+      if (deleted.size) review.deleted = [...deleted];
       // keep this reviewer's own body/edit/status; pull in the author's resolution from the remote file
-      review.comments = review.comments.map(lc => { const rc = rById[lc.id]; return rc ? { ...lc, resolution: rc.resolution || lc.resolution } : lc; });
-      (json.comments||[]).forEach(rc => { if (!review.comments.find(c=>c.id===rc.id)) review.comments.push(rc); });
+      review.comments = review.comments.filter(lc => !deleted.has(lc.id)).map(lc => { const rc = rById[lc.id]; return rc ? { ...lc, resolution: rc.resolution || lc.resolution } : lc; });
+      (json.comments||[]).forEach(rc => { if (!deleted.has(rc.id) && !review.comments.find(c=>c.id===rc.id)) review.comments.push(rc); });
       save(); renderComments(); if (document.getElementById('doc')) paintHighlights(); } }
   catch(e){ /* first time / offline */ } }
 // a local mutation isn't safe until confirmed on GitHub — flag it, persist, and schedule a push
@@ -626,9 +632,11 @@ function activateComment(id){ activeId=id; renderComments(); document.querySelec
 function paintHighlights(){ const doc=document.getElementById('doc'); if(!doc) return;
   doc.querySelectorAll('mark.cmark').forEach(m=>{ const p=m.parentNode; m.replaceWith(...m.childNodes); p.normalize(); });
   doc.querySelectorAll('figure[data-cid]').forEach(f=>{ f.classList.remove('cmark-fig'); delete f.dataset.cid; });
-  const blocks=[...doc.querySelectorAll('p, li, figcaption')];
-  review.comments.forEach(c=>{ if(c.kind==='figure'){ const q=(c.anchor.quote||'').replace(/^[^:]*:\s*/,'').replace(/\s+/g,' ').trim().slice(0,30); const fig=[...doc.querySelectorAll('figure')].find(f=>f.textContent.replace(/\s+/g,' ').includes(q)); if(fig){ fig.classList.add('cmark-fig'); fig.dataset.cid=c.id; fig.style.setProperty('--mk','var(--accent)'); } return; }
-    const q=(c.anchor.quote||'').replace(/\s+/g,' ').trim(); if(q.length<4) return; const needle=q.slice(0,50); const el=blocks.find(e=>e.textContent.replace(/\s+/g,' ').includes(needle.slice(0,40))); if(!el) return; wrapInNode(el,needle,c); }); }
+  // normalize each block's/figure's text ONCE, not once per comment (was O(comments × blocks))
+  const blocks=[...doc.querySelectorAll('p, li, figcaption')].map(el=>({el,txt:el.textContent.replace(/\s+/g,' ')}));
+  const figs=[...doc.querySelectorAll('figure')].map(el=>({el,txt:el.textContent.replace(/\s+/g,' ')}));
+  review.comments.forEach(c=>{ if(c.kind==='figure'){ const q=(c.anchor.quote||'').replace(/^[^:]*:\s*/,'').replace(/\s+/g,' ').trim().slice(0,30); const fig=figs.find(f=>f.txt.includes(q))?.el; if(fig){ fig.classList.add('cmark-fig'); fig.dataset.cid=c.id; fig.style.setProperty('--mk','var(--accent)'); } return; }
+    const q=(c.anchor.quote||'').replace(/\s+/g,' ').trim(); if(q.length<4) return; const needle=q.slice(0,50); const el=blocks.find(b=>b.txt.includes(needle.slice(0,40)))?.el; if(!el) return; wrapInNode(el,needle,c); }); }
 function wrapInNode(el,needle,c){ const tw=document.createTreeWalker(el,NodeFilter.SHOW_TEXT); let node, probe=needle.slice(0,30);
   while((node=tw.nextNode())){ const idx=node.nodeValue.indexOf(probe); if(idx>=0){ const r=document.createRange(); r.setStart(node,idx); r.setEnd(node,Math.min(node.nodeValue.length,idx+needle.length));
     const mk=document.createElement('mark'); mk.className='cmark'; mk.dataset.id=c.id; mk.dataset.tag='wording'; if(c.edit) mk.dataset.sugg=c.edit.op; try{ r.surroundContents(mk); mk.onclick=e=>{ e.stopPropagation(); activateComment(c.id); }; return true; }catch(e){ return false; } } } return false; }
