@@ -1843,7 +1843,15 @@ async function openReleasePanel(){
     box.querySelectorAll('.adv-resend').forEach(b => b.onclick = () => resendInvite(b.dataset.id));
     box.querySelectorAll('.adv-del').forEach(b => b.onclick = () => removeAdvisor(b.dataset.id));
   };
-  const persistAdvisors = async (msg) => { await putJson(t, 'advisors.json', advReg, advSha, msg); };
+  // read-modify-write: always fetch the current advisors.json (fresh sha) before writing, so we
+  // never send a stale/missing sha (GitHub 422) and never clobber the invite-status the workflow set.
+  const mutateAdvisors = async (fn, msg) => {
+    const { json, sha } = await getJson(t, 'advisors.json').catch(() => ({ json:null, sha:null }));
+    const reg = json && Array.isArray(json.advisors) ? json : { advisors: [] };
+    fn(reg);
+    advSha = await putJson(t, 'advisors.json', reg, sha, msg);
+    advReg.advisors = reg.advisors;
+  };
   const addAdvisor = async () => {
     const name = document.getElementById('adv-name').value.trim();
     const email = document.getElementById('adv-email').value.trim();
@@ -1851,10 +1859,10 @@ async function openReleasePanel(){
     const stat = document.getElementById('adv-stat');
     if (!name){ stat.textContent = 'Name is required.'; return; }
     const id = `${slugify(name)}-${rand4()}`;
-    advReg.advisors.push({ id, name, email, title, added_ts:new Date().toISOString(), invited:false, invited_ts:null, invite_error:null });
+    const entry = { id, name, email, title, added_ts:new Date().toISOString(), invited:false, invited_ts:null, invite_error:null };
     stat.textContent = 'Saving…';
     try {
-      await persistAdvisors(`advisors: add ${name}`);
+      await mutateAdvisors(reg => reg.advisors.push(entry), `advisors: add ${name}`);
       const { json:relNow, sha:relSha } = await getJson(t, 'release.json');
       relNow[id] = { name, released: [], responses_released: false };
       await putJson(t, 'release.json', relNow, relSha, `release: register ${name}`);
@@ -1863,28 +1871,26 @@ async function openReleasePanel(){
         : `Added (no email — share this portal link yourself): <code>${escapeHtml(advisorUrl(id, name))}</code>`;
       document.getElementById('adv-name').value = document.getElementById('adv-email').value = document.getElementById('adv-title').value = '';
       renderAdvList();
-    } catch(e){ stat.textContent = 'Failed: ' + e.message; advReg.advisors.pop(); }
+    } catch(e){ stat.textContent = 'Failed: ' + e.message; }
   };
   const resendInvite = async (id) => {
-    const a = advReg.advisors.find(x=>x.id===id); if (!a) return;
-    a.invited = false; a.invited_ts = null; a.invite_error = null;
-    try { await persistAdvisors(`advisors: resend invite ${a.name}`); flash('Invite re-queued — it will send shortly.'); renderAdvList(); }
+    try { await mutateAdvisors(reg => { const a = reg.advisors.find(x=>x.id===id); if (a){ a.invited=false; a.invited_ts=null; a.invite_error=null; } }, `advisors: resend invite ${id}`);
+      flash('Invite re-queued — it will send shortly.'); renderAdvList(); }
     catch(e){ flash('Failed: ' + e.message); }
   };
   // intentionally high-friction: must type the advisor's exact name. Removes them from the list +
   // release gate (their portal stops showing chapters); their already-submitted comments are kept.
   const removeAdvisor = async (id) => {
-    const i = advReg.advisors.findIndex(x => x.id === id); if (i < 0) return; const a = advReg.advisors[i];
+    const a = advReg.advisors.find(x => x.id === id); if (!a) return;
     const typed = prompt(`Remove ${a.name}?\n\nThis takes them off your advisor list and revokes their chapter access. Comments they already submitted are kept.\n\nTo confirm, type their full name exactly:`);
     if (typed === null) return;
     if (typed.trim() !== a.name.trim()){ flash('Name did not match — advisor not removed.'); return; }
-    const removed = advReg.advisors.splice(i, 1)[0];
     try {
-      await persistAdvisors(`advisors: remove ${a.name}`);
+      await mutateAdvisors(reg => { const i = reg.advisors.findIndex(x=>x.id===id); if (i>=0) reg.advisors.splice(i,1); }, `advisors: remove ${a.name}`);
       try { const { json:relNow, sha:relSha } = await getJson(t, 'release.json');
         if (relNow && relNow[id]){ delete relNow[id]; await putJson(t, 'release.json', relNow, relSha, `release: remove ${a.name}`); } } catch(e){}
       flash(`Removed ${a.name}.`); renderAdvList();
-    } catch(e){ advReg.advisors.splice(i, 0, removed); flash('Failed: ' + e.message); renderAdvList(); }
+    } catch(e){ flash('Failed: ' + e.message); }
   };
   document.getElementById('adv-add').onclick = addAdvisor;
   renderAdvList();
