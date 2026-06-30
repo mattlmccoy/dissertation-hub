@@ -27,6 +27,7 @@ function mergeReviews(remote, local){
   const out = { ...(remote||{}), ...(local||{}) };
   // deletion tombstones: an id deleted on either side stays deleted — never resurrected by the merge
   const deleted = new Set([ ...((remote&&remote.deleted)||[]), ...((local&&local.deleted)||[]) ]);
+  const FINAL = new Set(['merged','declined','answered']);   // owner-finalized states a stale local copy must never downgrade
   const rById = Object.fromEntries(((remote&&remote.comments)||[]).map(c=>[c.id,c]));
   const lById = Object.fromEntries(((local&&local.comments)||[]).map(c=>[c.id,c]));
   const ids = [...new Set([...Object.keys(rById), ...Object.keys(lById)])].filter(id => !deleted.has(id));
@@ -38,7 +39,7 @@ function mergeReviews(remote, local){
     const seen = new Set();
     for (const m of [...(r.thread||[]), ...(l.thread||[])]){ const k = (m.author||'')+'|'+(m.ts||''); if (!seen.has(k)){ seen.add(k); thread.push(m); } }
     return { ...r,                         // remote base → owner fields (resolution, read, sent, advisor_state, reopened) win
-      body:l.body, edit:l.edit, status:l.status, anchor:l.anchor, kind:l.kind, tag:l.tag, author:l.author, created_ts:l.created_ts||r.created_ts,
+      body:l.body, edit:l.edit, status:(FINAL.has(r.status)&&!FINAL.has(l.status))?r.status:l.status, anchor:l.anchor, kind:l.kind, tag:l.tag, author:l.author, created_ts:l.created_ts||r.created_ts,
       ...(thread.length?{thread}:{}) };
   });
   if (deleted.size) out.deleted = [...deleted]; else delete out.deleted;  // persist tombstones so deletes survive future syncs
@@ -127,7 +128,9 @@ async function syncUp(){ const t = tok(); if (!t) return false;
   for (let attempt = 0; attempt < 5; attempt++){
     let remote = null, sha = reviewSha;
     try { const g = await getJson(t, path); remote = g.json; sha = g.sha; }
-    catch(e){ if (is401(e)){ keyBad = true; renderBanner(); return false; } /* 404 = first push */ }
+    catch(e){ if (is401(e)){ keyBad = true; renderBanner(); return false; }
+      /* non-401 (404 / empty / corrupt remote): don't reuse a stale sha — refetch the real one so the PUT can overwrite */
+      sha = await _getSha(t, path); }
     const merged = mergeReviews(remote, review);
     try { reviewSha = await putJson(t, path, merged, sha, `review(${label}): ${current}`, false);
       merged.pending = false; review = merged; save(); renderBanner(); return true; }
@@ -781,9 +784,15 @@ async function setAdvisorState(cid, ch, state){
   const c=_findRespComment(cid); if(c){ if(state) c.advisor_state=state; else delete c.advisor_state; }
   renderResponses(_respGroups);
   const t=tok(); if(!t) return;
-  try{ const path=`advisor/${effId()}/${ch}.json`; const { json, sha }=await getJson(t, path);
-    const tc=(json?.comments||[]).find(x=>x.id===cid); if(tc){ if(state) tc.advisor_state=state; else delete tc.advisor_state; await putJson(t, path, json, sha, `triage(${effId()}): ${ch} ${cid} ${state||'open'}`); }
-  }catch(e){ flash('Saved here; sync failed: '+e.message); }
+  // refetch-and-reapply each attempt so a 409 never re-sends a stale snapshot over a concurrent write
+  const path=`advisor/${effId()}/${ch}.json`;
+  for(let attempt=0; attempt<5; attempt++){
+    try{ const { json, sha }=await getJson(t, path);
+      const tc=(json?.comments||[]).find(x=>x.id===cid); if(!tc) return;   // withdrawn/absent — nothing to write
+      if(state) tc.advisor_state=state; else delete tc.advisor_state;
+      await putJson(t, path, json, sha, `triage(${effId()}): ${ch} ${cid} ${state||'open'}`, false); return;
+    }catch(e){ if(/\b409\b/.test(e.message)&&attempt<4){ await new Promise(r=>setTimeout(r,250*(attempt+1))); continue; } flash('Saved here; sync failed: '+e.message); return; }
+  }
 }
 function seeInContext(ch, q){
   if(ch==='__outline__'){ loadOutline(); return; }
@@ -792,17 +801,20 @@ function seeInContext(ch, q){
 async function replyToResponse(cid, ch, rb){
   const ta=rb.querySelector('textarea'); const v=ta.value.trim(); if(!v) return;
   const t=tok(); if(!t){ flash('Add your access key first.'); return; }
-  try{
-    const path=`advisor/${effId()}/${ch}.json`;
-    const { json, sha }=await getJson(t, path);
-    const c=(json?.comments||[]).find(x=>x.id===cid); if(!c){ flash('Could not find that comment.'); return; }
-    c.thread=[...(c.thread||[]), { author:'advisor', text:v, ts:new Date().toISOString() }];
-    c.status='submitted'; c.reopened=true;
-    await putJson(t, path, json, sha, `reply(${effId()}): ${ch} ${cid}`);
-    const fup=document.createElement('div'); fup.className='resp-fup'; fup.style.borderLeftColor='var(--success)'; fup.innerHTML=`<span class="resp-fup-h">You · ${new Date().toISOString().slice(0,10)}</span>${escapeHtml(v)}`;
-    rb.before(fup); rb.style.display='none'; ta.value='';
-    flash('Reply sent to the author.');
-  }catch(e){ flash('Reply failed: '+e.message); }
+  const path=`advisor/${effId()}/${ch}.json`;
+  const msg={ author:'advisor', text:v, ts:new Date().toISOString() };
+  // refetch-and-reapply each attempt: on a 409 we append to the FRESH remote, never overwrite it with a stale copy
+  for(let attempt=0; attempt<5; attempt++){
+    try{
+      const { json, sha }=await getJson(t, path);
+      const c=(json?.comments||[]).find(x=>x.id===cid); if(!c){ flash('Could not find that comment.'); return; }
+      c.thread=[...(c.thread||[]), msg]; c.status='submitted'; c.reopened=true;
+      await putJson(t, path, json, sha, `reply(${effId()}): ${ch} ${cid}`, false);
+      const fup=document.createElement('div'); fup.className='resp-fup'; fup.style.borderLeftColor='var(--success)'; fup.innerHTML=`<span class="resp-fup-h">You · ${new Date().toISOString().slice(0,10)}</span>${escapeHtml(v)}`;
+      rb.before(fup); rb.style.display='none'; ta.value='';
+      flash('Reply sent to the author.'); return;
+    }catch(e){ if(/\b409\b/.test(e.message)&&attempt<4){ await new Promise(r=>setTimeout(r,250*(attempt+1))); continue; } flash('Reply failed: '+e.message); return; }
+  }
 }
 async function embedChangedFigures(groups){
   const t=tok(); const dev=location.hostname==='localhost'||location.hostname==='127.0.0.1';

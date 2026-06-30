@@ -41,3 +41,15 @@ test('owner-injected comment (remote-only, not deleted) is still preserved', () 
   const merged = mergeReviews({ comments: [{ id: 'inj', body: 'owner' }] }, { comments: [], deleted: [] });
   assert.ok(merged.comments.find(c => c.id === 'inj'), 'must not over-delete non-tombstoned comments');
 });
+
+// C1: a stale local copy must not downgrade an owner-finalized status (mergeReviews(remote, local))
+test('a stale local status does NOT downgrade an owner-finalized comment', () => {
+  const merged = mergeReviews({ comments: [{ id: 'c1', status: 'merged', body: 'x' }] },
+                              { comments: [{ id: 'c1', status: 'open', body: 'x' }] });
+  assert.equal(merged.comments.find(c => c.id === 'c1').status, 'merged', 'owner-final status preserved');
+});
+test('the advisor can still advance status (open -> submitted) on push', () => {
+  const merged = mergeReviews({ comments: [{ id: 'c1', status: 'open', body: 'x' }] },
+                              { comments: [{ id: 'c1', status: 'submitted', body: 'x' }] });
+  assert.equal(merged.comments.find(c => c.id === 'c1').status, 'submitted', 'local advance wins for working states');
+});
