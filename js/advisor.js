@@ -17,6 +17,10 @@ const _API='https://api.github.com', _OWNER='mattlmccoy', _REPO='dissertation-tr
 const _hdr = t => ({ Authorization:`Bearer ${t}`, Accept:'application/vnd.github+json' });
 async function getJson(t, path){ const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}?t=${Date.now()}`,{headers:_hdr(t),cache:'no-store'}); if(r.status===404) return {json:null,sha:null}; if(!r.ok) throw new Error('GitHub '+r.status); const d=await r.json(); if(typeof d.content!=='string'||!d.content.trim()) throw new Error('empty content'); return {json:JSON.parse(decodeURIComponent(escape(atob(d.content.replace(/\s/g,''))))),sha:d.sha}; }
 async function putJson(t, path, obj, sha, msg, autoRetry=true){ const content=btoa(unescape(encodeURIComponent(JSON.stringify(obj,null,2)))); const put=s=>fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content,sha:s||undefined})}); let r=await put(sha); if(r.status===409&&autoRetry){ try{ const cur=await getJson(t,path); r=await put(cur.sha); }catch(e){} } if(!r.ok) throw new Error('put failed: '+r.status); return (await r.json()).content.sha; }
+// binary file I/O (PNG markups) — self-contained, mirrors the JSON helpers above
+async function _getSha(t, path){ try{ const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}?t=${Date.now()}`,{headers:_hdr(t),cache:'no-store'}); if(!r.ok) return null; return (await r.json()).sha; }catch(e){ return null; } }
+async function putFile(t, path, base64, msg){ const put=s=>fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}`,{method:'PUT',headers:_hdr(t),body:JSON.stringify({message:msg,content:base64,sha:s||undefined})}); const r=await put(await _getSha(t,path)); if(!r.ok) throw new Error('put file failed: '+r.status); return (await r.json()).content.sha; }
+async function getDataUrl(t, path, mime='image/png'){ const r=await fetch(`${_API}/repos/${_OWNER}/${_REPO}/contents/${path}?t=${Date.now()}`,{headers:_hdr(t),cache:'no-store'}); if(!r.ok) throw new Error('GitHub '+r.status); const d=await r.json(); return `data:${mime};base64,`+(d.content||'').replace(/\s/g,''); }
 // merge two reviews of the SAME reviewer file without losing anything: union comments by id;
 // remote wins owner-authoritative fields, local wins reviewer-authoritative fields; thread merged by (author,ts).
 function mergeReviews(remote, local){
@@ -103,7 +107,7 @@ async function syncDown(){ const t = tok(); if (!t) return;
       save(); renderComments(); if (document.getElementById('doc')) paintHighlights(); } }
   catch(e){ /* first time / offline */ } }
 // a local mutation isn't safe until confirmed on GitHub — flag it, persist, and schedule a push
-function markDirty(){ review.pending = true; markDirty(); renderBanner(); }
+function markDirty(){ review.pending = true; save(); syncUpSoon(); renderBanner(); }
 function syncUpSoon(){ if (!tok()) return; clearTimeout(syncTimer); syncTimer = setTimeout(() => syncUp(), 1200); }
 // read-modify-merge push: returns true only when GitHub confirms (2xx). Never clobbers owner edits.
 async function syncUp(){ const t = tok(); if (!t) return false;
@@ -259,7 +263,7 @@ function figureLabel(fig){ const cap=fig.querySelector('figcaption')?.textConten
 function wireFigures(doc){ doc.querySelectorAll('figure, img').forEach(el=>{ const fig=el.tagName==='FIGURE'?el:(el.closest('figure')||el); if(fig.dataset.figWired) return; fig.dataset.figWired='1'; fig.classList.add('fig-commentable');
   fig.addEventListener('click',e=>{ if(window.getSelection().toString().trim()) return; e.stopPropagation(); document.getElementById('pop')?.remove(); const info=figureLabel(fig);
     const rr=read.getBoundingClientRect(), fr=fig.getBoundingClientRect(); const rects=[{x:fr.x-rr.x,y:fr.y-rr.y+read.scrollTop,w:fr.width,h:fr.height}];
-    pending={ quote: info.label?`${info.label}${info.quote?': '+info.quote:''}`:(info.quote||'Figure'), kind:'figure', figure:info.id, section:headingFor(fig), confirmed:true, rects:[] }; showPopover(pending,rects,'suggestion'); }); }); }
+    pending={ quote: info.label?`${info.label}${info.quote?': '+info.quote:''}`:(info.quote||'Figure'), kind:'figure', figure:info.id, section:headingFor(fig), confirmed:true, rects:[] }; showPopover(pending,rects,'suggestion',fig); }); }); }
 const chapterByNum = n => CHAPTERS.find(c=>c.n===n);
 function sectionNumberMap(doc){ const n=chMeta(current).n; const map={}; let h2=0,h3=0; doc.querySelectorAll('h2, h3').forEach(h=>{ if(h.tagName==='H2'){h2++;h3=0;map[`${n}.${h2}`]=h;} else {h3++;map[`${n}.${h2}.${h3}`]=h;} }); return map; }
 function figTableMaps(doc){ const fig={},tab={}; doc.querySelectorAll('figure').forEach(f=>{ const m=(f.querySelector(':scope > figcaption')?.textContent||'').match(/^\s*Figure\s+(\d+(?:\.\d+)*)\./); if(m) fig[m[1]]=f; });
@@ -303,12 +307,13 @@ function selToPopover(){ if(document.getElementById('pop')) return; const sel=wi
   pending=anchorFromSelection({text,page:null,rects}); pending.section=headingFor(range.startContainer); showPopover(pending,rects); }
 read.addEventListener('mouseup', selToPopover);
 read.addEventListener('touchend', ()=>setTimeout(selToPopover,10));
-function showPopover(anchor,rects,defaultTag='wording'){
+function showPopover(anchor,rects,defaultTag='wording',figEl=null){
   document.getElementById('pop')?.remove(); const top=Math.max(...rects.map(r=>r.y+r.h))+10; const isFig=anchor.kind==='figure';
   const pop=document.createElement('div'); pop.id='pop'; pop.className='popover'; pop.style.top=top+'px'; pop.style.left='50%'; pop.style.transform='translateX(-50%)';
   const modes=isFig?'':`<div class="pmodes" id="pmodes"><button data-m="note" class="on">Comment</button><button data-m="replace">Replace</button><button data-m="insert">Insert after</button><button data-m="delete">Delete</button></div>`;
   pop.innerHTML=`<div class="head"><i class="ti ti-${isFig?'photo':'link'}" style="margin-right:5px"></i>Commenting on ${isFig?'figure':''}<span class="loc"><i class="ti ti-circle-check-filled"></i>${anchor.section?'§ '+anchor.section.slice(0,38):(isFig?'this figure':'this passage')}</span></div>
     <div class="snip" id="psnip">"${escapeHtml(anchor.quote.slice(0,150))}"</div>${modes}
+    ${isFig&&figEl?`<button class="btn figdraw-btn" id="figdraw"><i class="ti ti-pencil"></i>Draw on the figure</button>`:''}
     <textarea id="crepl" class="crepl" style="display:none"></textarea><div class="tags" id="tags"></div>
     <textarea id="cbody" placeholder="Leave a comment…"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary" id="csave">Comment</button><button class="btn" id="ccancel">Cancel</button></div>`;
@@ -322,6 +327,7 @@ function showPopover(anchor,rects,defaultTag='wording'){
     pop.querySelector('#psnip').style.textDecoration=m==='delete'?'line-through':'none'; (nr?repl:body).focus(); };
   pop.querySelectorAll('#pmodes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m)); body.focus();
   pop.querySelector('#ccancel').onclick=()=>{ pop.remove(); window.getSelection().removeAllRanges(); };
+  pop.querySelector('#figdraw')?.addEventListener('click',()=>{ pop.remove(); openFigureMarkup(figEl,anchor); });
   saveBtn.onclick=()=>{ let edit=null;
     if(mode==='replace') edit={op:'replace',find:anchor.quote,replacement:repl.value};
     else if(mode==='insert') edit={op:'insert',find:anchor.quote,position:'after',replacement:repl.value};
@@ -329,6 +335,71 @@ function showPopover(anchor,rects,defaultTag='wording'){
     if(edit&&mode!=='delete'&&!repl.value.trim()){ flash('Enter the '+(mode==='insert'?'text to insert':'replacement text')+'.'); return; }
     review=addComment(review,{ anchor:pending, kind:edit?'suggestion':pending.kind, tag:edit?'edit':tag, body:body.value, edit, author:authorId() });
     markDirty(); renderComments(); buildNav(); paintHighlights(); pop.remove(); window.getSelection().removeAllRanges(); };
+}
+
+// ---------- draw-on-figure markup (capture-only: composites figure + strokes → PNG) ----------
+const markupCache = {};   // path -> dataURL, so a freshly-drawn markup shows instantly
+function openFigureMarkup(fig, anchor){
+  document.getElementById('pop')?.remove();
+  const img = fig.querySelector('img') || fig;
+  const ir = img.getBoundingClientRect();
+  const W = Math.max(40, Math.round(ir.width)), H = Math.max(40, Math.round(ir.height));
+  const ov = document.createElement('div'); ov.id = 'figmk'; ov.className = 'figmk-back';
+  ov.innerHTML = `<div class="figmk-modal">
+    <div class="figmk-tools">
+      <button class="figmk-tool on" data-t="box" title="Drag a box around the area with the issue"><i class="ti ti-square"></i>Box</button>
+      <button class="figmk-tool" data-t="free" title="Freehand — circle or point at something"><i class="ti ti-scribble"></i>Draw</button>
+      <span class="figmk-sep"></span>
+      <button class="figmk-undo">Undo</button><button class="figmk-clear">Clear</button>
+      <span class="figmk-hint">box = mark the area · draw = circle or point</span></div>
+    <div class="figmk-stage" style="width:${W}px;height:${H}px">
+      <img class="figmk-img" src="${img.src}" width="${W}" height="${H}" crossorigin="anonymous">
+      <canvas class="figmk-canvas" width="${W}" height="${H}"></canvas></div>
+    <textarea class="figmk-note" rows="2" placeholder="Describe the change you want…"></textarea>
+    <div class="figmk-actions"><button class="btn btn-primary figmk-save">Save markup</button><button class="btn figmk-cancel">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const canvas = ov.querySelector('.figmk-canvas'), ctx = canvas.getContext('2d');
+  const COLOR = '#d6409f';                       // single high-visibility annotation color
+  let tool = 'box', drawing = false, shapes = [], cur = null, start = null;
+  const drawShape = s => { ctx.strokeStyle=COLOR; ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round';
+    if (s.type === 'rect'){ ctx.fillStyle='rgba(214,64,159,.12)'; ctx.fillRect(s.x,s.y,s.w,s.h); ctx.strokeRect(s.x,s.y,s.w,s.h); }
+    else { ctx.beginPath(); s.points.forEach((p,i) => i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); } };
+  const redraw = preview => { ctx.clearRect(0,0,W,H); shapes.forEach(drawShape); if (preview) drawShape(preview); };
+  const pos = e => { const r = canvas.getBoundingClientRect(); return [ (e.clientX-r.left)*(W/r.width), (e.clientY-r.top)*(H/r.height) ]; };
+  const rectOf = (a,b) => ({ type:'rect', x:Math.min(a[0],b[0]), y:Math.min(a[1],b[1]), w:Math.abs(b[0]-a[0]), h:Math.abs(b[1]-a[1]) });
+  canvas.addEventListener('pointerdown', e => { drawing=true; start=pos(e);
+    if (tool==='free'){ cur={type:'free',points:[start]}; shapes.push(cur); } canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => { if (!drawing) return; const p=pos(e);
+    if (tool==='free'){ cur.points.push(p); redraw(); } else redraw(rectOf(start,p)); });
+  canvas.addEventListener('pointerup', e => { if (!drawing) return; drawing=false;
+    if (tool==='box'){ const r=rectOf(start,pos(e)); if (r.w>4 && r.h>4) shapes.push(r); redraw(); } });
+  ov.querySelectorAll('.figmk-tool').forEach(b => b.onclick = () => { tool=b.dataset.t; ov.querySelectorAll('.figmk-tool').forEach(x => x.classList.toggle('on', x===b)); });
+  ov.querySelector('.figmk-undo').onclick = () => { shapes.pop(); redraw(); };
+  ov.querySelector('.figmk-clear').onclick = () => { shapes=[]; redraw(); };
+  ov.querySelector('.figmk-cancel').onclick = () => ov.remove();
+  ov.querySelector('.figmk-save').onclick = async () => {
+    if (!shapes.length){ flash('Mark the figure first (Box or Draw), or Cancel.'); return; }
+    const note = ov.querySelector('.figmk-note').value.trim();
+    let b64 = null;
+    try { const ex = document.createElement('canvas'); ex.width=W; ex.height=H; const ec = ex.getContext('2d');
+      ec.drawImage(ov.querySelector('.figmk-img'), 0,0, W,H); ec.drawImage(canvas, 0,0);
+      const dataUrl = ex.toDataURL('image/png'); b64 = dataUrl.split(',')[1];
+      review = addComment(review, { anchor, kind:'figure', tag:'figure', body:note, author:authorId() });
+      const c = review.comments[review.comments.length-1];
+      const path = `markups/${c.id}.png`; markupCache[path] = dataUrl;
+      review = updateComment(review, c.id, { markup:{ path, ts:new Date().toISOString() } });
+      markDirty(); renderComments(); buildNav(); paintHighlights(); ov.remove();
+      const t = tok();
+      if (t){ await putFile(t, path, b64, `markup: ${effId()} ${c.id}`); flash('Markup saved.'); }
+      else flash('Markup saved locally — add your access key to upload it.');
+    } catch(e){ flash('Markup upload failed: '+e.message); }
+  };
+}
+function loadMarkupThumb(el, path){
+  if (markupCache[path]){ el.querySelector('img').src = markupCache[path]; return; }
+  const t = tok(); if (!t) return;
+  getDataUrl(t, path).then(u => { markupCache[path] = u; const img = el.querySelector('img'); if (img) img.src = u; }).catch(() => {});
 }
 
 // ---------- comments rail ----------
@@ -358,7 +429,8 @@ function _buildCard(c){
         <button class="icbtn cact" data-act="edit" title="Edit" style="width:25px;height:25px;font-size:14px"><i class="ti ti-pencil"></i></button>
         <button class="icbtn cact" data-act="del" title="Delete" style="width:25px;height:25px;font-size:14px"><i class="ti ti-trash"></i></button></span>
       ${stBadge}</div>
-    <div class="snip">"${escapeHtml((c.anchor.quote||'').slice(0,52))}"${c.created_ts?`<span class="cmeta"> · ${fmtDate(c.created_ts)}</span>`:''}</div><div class="body" style="${resolved?'opacity:.5;text-decoration:line-through':''}">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}${threadHtml(c)}${seenHtml(c)}`;
+    <div class="snip">"${escapeHtml((c.anchor.quote||'').slice(0,52))}"${c.created_ts?`<span class="cmeta"> · ${fmtDate(c.created_ts)}</span>`:''}</div><div class="body" style="${resolved?'opacity:.5;text-decoration:line-through':''}">${escapeHtml(c.body)}</div>${suggHtml(c)}${resolHtml(c)}${threadHtml(c)}${seenHtml(c)}${c.markup?`<div class="cmarkup" data-path="${escapeHtml(c.markup.path)}" title="Your markup"><img alt="figure markup"></div>`:''}`;
+  if(c.markup) loadMarkupThumb(card.querySelector('.cmarkup'), c.markup.path);
   if(c.id===activeId) card.classList.add('active');
   card.onmouseenter=()=>{ card.querySelector('.cactions').style.display='flex'; const s=card.querySelector('.status'); if(s&&s.textContent) s.style.visibility='hidden'; document.querySelector(`#doc .cmark[data-id="${c.id}"]`)?.classList.add('cmark-hot'); };
   card.onmouseleave=()=>{ card.querySelector('.cactions').style.display='none'; const s=card.querySelector('.status'); if(s) s.style.visibility=''; document.querySelector(`#doc .cmark[data-id="${c.id}"]`)?.classList.remove('cmark-hot'); };
