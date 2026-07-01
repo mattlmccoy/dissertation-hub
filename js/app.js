@@ -80,7 +80,7 @@ function reconcileReview(local, remote, preferRemote){
   if (!remote) return local;
   const deleted = new Set([ ...((local&&local.deleted)||[]), ...((remote.deleted)||[]) ]);  // tombstones: a deleted comment is never resurrected by a sync
   const byId = Object.fromEntries((remote.comments||[]).map(c => [c.id, c]));
-  const adopt = (lc, rc) => ({ ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution });
+  const adopt = (lc, rc) => ({ ...lc, status:rc.status, claude:rc.claude, staged_edit:rc.staged_edit, resolution:rc.resolution, anchor:rc.anchor });
   const comments = (local.comments||[]).filter(lc => !deleted.has(lc.id)).map(lc => {
     const rc = byId[lc.id]; if (!rc) return lc;
     if (FINAL_STATES.has(rc.status) && !FINAL_STATES.has(lc.status)) return adopt(lc, rc);   // server finalized it (e.g. merged) — adopt, never downgrade
