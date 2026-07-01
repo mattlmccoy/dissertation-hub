@@ -852,6 +852,12 @@ function keyWords(s){
     .replace(/\[[^\]]*\]/g,' ').replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(w => w.length>=3);
 }
 function locateAnchor(c, { allowSection = true } = {}){
+  if (current === '__outline__'){   // outline comments live on .ol-node/.ol-cmt buttons, not in #doc
+    const q = c.anchor?.quote||'', s = c.anchor?.section||'';
+    const btn = [...document.querySelectorAll('.ol-cmt')].find(b => b.dataset.node===q && b.dataset.sec===s);
+    if (btn){ btn.closest('.ol-chapter')?.classList.add('open'); return btn.closest('.ol-node, .ol-chead')||btn; }
+    return null;
+  }
   const sel = `#doc .tc-stage[data-cid="${c.id}"], #doc .cmark[data-id="${c.id}"], #doc .cmark[data-aid="${c.id}"], #doc .cmark-el[data-cid="${c.id}"], #doc figure[data-cid="${c.id}"]`;
   const mark = document.querySelector(sel); if (mark) return mark;        // painted edit/highlight wins
   const quote = c.anchor?.quote || '';
