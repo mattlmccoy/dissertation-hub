@@ -4,13 +4,21 @@
 const API = 'https://api.github.com', OWNER = 'mattlmccoy', REPO = 'dissertation-tracker-data';
 const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.github+json' });
 
-// Provider prefill table (pure data). domains[] drives detectProvider.
+// Provider prefill table (pure data). domains[] drives detectProvider. keyUrl/keyLabel deep-link the
+// EXACT page where the owner generates the app password / API key that goes in the password field —
+// which is never their normal account login password.
 export const PROVIDERS = {
-  gmail:    { id:'gmail',    label:'Gmail (app password)',     host:'smtp.gmail.com',     port:465, userHint:'your @gmail.com address', passHint:'16-char App Password (not your login password)', domains:['gmail.com','googlemail.com'] },
-  outlook:  { id:'outlook',  label:'Outlook / Office 365',     host:'smtp.office365.com', port:587, userHint:'your work/school address',   passHint:'account or app password (IT may require app password)', domains:['outlook.com','hotmail.com','live.com'] },
-  sendgrid: { id:'sendgrid', label:'SendGrid',                 host:'smtp.sendgrid.net',  port:587, userFixed:'apikey', userHint:'literally the word apikey', passHint:'SendGrid API key', domains:[] },
-  brevo:    { id:'brevo',    label:'Brevo (Sendinblue)',       host:'smtp-relay.brevo.com', port:587, userHint:'your Brevo login/email', passHint:'Brevo SMTP key', domains:[] },
-  custom:   { id:'custom',   label:'Custom SMTP',              host:'', port:587, userHint:'SMTP username', passHint:'SMTP password / API key', domains:[] },
+  gmail:    { id:'gmail',    label:'Gmail',                host:'smtp.gmail.com',     port:465, domains:['gmail.com','googlemail.com'],
+              secretWord:'App Password', keyUrl:'https://myaccount.google.com/apppasswords', keyLabel:'Create your Gmail App Password',
+              keyNote:'Requires 2-Step Verification to be on. Paste the 16-character code (spaces optional).' },
+  outlook:  { id:'outlook',  label:'Outlook / Office 365', host:'smtp.office365.com', port:587, domains:['outlook.com','hotmail.com','live.com'],
+              secretWord:'app password', keyUrl:'https://account.live.com/proofs/AppPassword', keyLabel:'Create an Outlook app password',
+              keyNote:'For personal Outlook/Hotmail. Work/school (Office 365) accounts set app passwords via your IT security portal.' },
+  brevo:    { id:'brevo',    label:'Brevo (Sendinblue)',   host:'smtp-relay.brevo.com', port:587, domains:[],
+              secretWord:'SMTP key', keyUrl:'https://app.brevo.com/settings/keys/smtp', keyLabel:'Get your Brevo SMTP key',
+              keyNote:'Use the SMTP key, not the account password.' },
+  custom:   { id:'custom',   label:'Custom SMTP',          host:'', port:587, domains:[],
+              secretWord:'app password / API key', keyUrl:'', keyLabel:'', keyNote:"Use your provider's app password or API key, not your login." },
 };
 
 // Map a from-address domain to a provider id. .edu/institutional → outlook; unknown → custom.

@@ -22,12 +22,13 @@ test('partial gmail domain reads custom, complete reads gmail', () => {
   assert.strictEqual(detectProvider('me@gmail.com'), 'gmail');  // finished → must win
 });
 
-test('PROVIDERS have host/port and sendgrid is userFixed', () => {
+test('PROVIDERS have host/port and an app-password link', () => {
   assert.strictEqual(PROVIDERS.gmail.host, 'smtp.gmail.com');
   assert.strictEqual(String(PROVIDERS.gmail.port), '465');
+  assert.strictEqual(PROVIDERS.gmail.keyUrl, 'https://myaccount.google.com/apppasswords');
   assert.strictEqual(PROVIDERS.outlook.host, 'smtp.office365.com');
   assert.strictEqual(String(PROVIDERS.outlook.port), '587');
-  assert.strictEqual(PROVIDERS.sendgrid.userFixed, 'apikey');
+  assert.ok(PROVIDERS.brevo.keyUrl.startsWith('https://'));
 });
 
 test('genKey is 32 base62 chars', () => {
