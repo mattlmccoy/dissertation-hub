@@ -645,8 +645,9 @@ function filteredComments(){
   let cs = review.comments.filter(c =>
     (cFilter.status === 'all' || c.status === cFilter.status) &&
     (cFilter.tag === 'all' || c.tag === cFilter.tag));
-  if (cFilter.sort === 'new') cs = [...cs].sort((a,b) => (b.created_ts||'').localeCompare(a.created_ts||''));
-  else { const ord = docOrderIndex(); cs = [...cs].sort((a,b) => (ord[a.id]-ord[b.id]) || (a.created_ts||'').localeCompare(b.created_ts||'')); }
+  const cts = c => String(c.created_ts ?? '');   // coerce: a numeric created_ts must never crash the sort (localeCompare is String-only)
+  if (cFilter.sort === 'new') cs = [...cs].sort((a,b) => cts(b).localeCompare(cts(a)));
+  else { const ord = docOrderIndex(); cs = [...cs].sort((a,b) => (ord[a.id]-ord[b.id]) || cts(a).localeCompare(cts(b))); }
   return cs;
 }
 function renderComments(){
@@ -2066,7 +2067,9 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
   // Actions, write the secrets/vars, fire a real test send, and report the true outcome.
   const runConnect = async (S, stat) => {
     const P = PROVIDERS[S.provider] || {};
-    const user = (S.user || '').trim(), pass = S.pass, name = (S.name || '').trim(), testTo = (S.testTo || '').trim();
+    const user = (S.user || '').trim(), name = (S.name || '').trim(), testTo = (S.testTo || '').trim();
+    // Gmail App Passwords are shown with spaces but must be entered without them — strip all whitespace.
+    const pass = S.provider === 'gmail' ? (S.pass || '').replace(/\s+/g, '') : S.pass;
     const host = (S.provider === 'custom' ? S.host : P.host || '').trim();
     const port = String(S.provider === 'custom' ? (S.port || '587') : P.port || '').trim();
     if (!user || !pass){ stat.textContent = 'Missing your sending address or key — go Back.'; return; }
