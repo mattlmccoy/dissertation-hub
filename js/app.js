@@ -1,7 +1,7 @@
 import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=ac72964';
 import { anchorFromSelection } from './anchor.js?v=ac72964';
 import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=ac72964';
-import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub } from './ghsecrets.js?v=ac72964';
+import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub, isScopeError } from './ghsecrets.js?v=ac72964';
 import { sealToBase64 } from './vendor/seal.js?v=ac72964';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
@@ -1889,6 +1889,16 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
   // TOKEN_URL: pre-scoped classic token so the owner just clicks Generate (repo→secrets, workflow→dispatch).
   const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=RFAM%20email%20setup';
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+  // The elevated token must do THREE things: write secrets (getPublicKey), and read+dispatch Actions
+  // (latestRun proxies Actions access). Checking only secrets let a Secrets-but-not-Actions token
+  // through, then latestRun 403'd ("Failed: runs 403"). Returns the public key when fully capable,
+  // null when a permission is missing, and rethrows genuine/transient errors.
+  const checkAccess = async (token) => {
+    let pk;
+    try { pk = await getPublicKey(token); } catch(e){ if (isScopeError(e)) return null; throw e; }
+    try { await latestRun(token); }        catch(e){ if (isScopeError(e)) return null; throw e; }
+    return pk;
+  };
   // Injected only when the saved login can't write settings — a visually separate one-time GitHub
   // token (never confused with the email password, never stored).
   const injectTokenSection = ($) => {
@@ -1956,7 +1966,7 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
       if (pf.name && !$('ce-name').value) $('ce-name').value = pf.name;
       if (pf.email && !$('ce-test').value) $('ce-test').value = pf.email;
     }).catch(() => {});
-    withTimeout(getPublicKey(tok()), 8000).then(() => {}).catch(e => { if (e.code === 'NOSCOPE') injectTokenSection($); });
+    withTimeout(checkAccess(tok()), 9000).then(pk => { if (!pk) injectTokenSection($); }).catch(() => {});
   };
   const connectEmail = async ($) => {
     const stat = $('ce-stat');
@@ -1975,15 +1985,14 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
       etok = gh;
     }
     stat.textContent = 'Checking access…';
+    // Verify Secrets + Actions together, so we never fail mid-write with "runs 403".
     let pk;
-    try { pk = await getPublicKey(etok); }
-    catch(e){
-      if (e.code === 'NOSCOPE'){
-        if (ghField){ stat.innerHTML = 'That GitHub token can\'t write settings — regenerate it with the <b>repo</b> box ticked, then paste again.'; return; }
-        injectTokenSection($);
-        stat.innerHTML = 'Saving needs a one-time <b>GitHub token</b> — I added a box for it above. Generate it, paste, and Connect again.'; return;
-      }
-      stat.textContent = 'Access check failed: ' + e.message; return;
+    try { pk = await checkAccess(etok); }
+    catch(e){ stat.textContent = 'Access check failed: ' + e.message; return; }
+    if (!pk){
+      if (ghField){ stat.innerHTML = 'That GitHub token is missing <b>Secrets</b> or <b>Actions</b> access — regenerate it with the <b>repo</b> box ticked (that grants both), then paste again.'; return; }
+      injectTokenSection($);
+      stat.innerHTML = 'Saving needs a one-time <b>GitHub token</b> with repo access — I added a box for it above. Click Generate (keep <b>repo</b> checked), paste, and Connect again.'; return;
     }
     try {
       // write secrets + variables
@@ -2020,7 +2029,11 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
         const err = json?.email_test?.error || ('run concluded: ' + run.conclusion);
         stat.innerHTML = 'Test send failed: <code>' + escapeHtml(err) + '</code>. Fix the credential and Connect again.';
       }
-    } catch(e){ stat.textContent = 'Failed: ' + e.message; }
+    } catch(e){
+      // A late 403 (e.g. dispatch needs Actions:write the token lacks) → actionable guidance, not a raw code.
+      if (isScopeError(e)) stat.innerHTML = 'Your GitHub token is missing the <b>Actions</b> access needed to run the test — regenerate the one-time token with the <b>repo</b> box ticked (that grants it), then Connect again.';
+      else stat.textContent = 'Failed: ' + e.message;
+    }
   };
   const renderAdvList = () => {
     renderEmailBanner();

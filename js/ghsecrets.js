@@ -38,6 +38,12 @@ export function genKey(){
   let s = ''; for (const b of r) s += A[b % 62]; return s;
 }
 
+// True when an error means the token lacks a needed permission (Secrets OR Actions) — a 403/404 or
+// the NOSCOPE code — vs a transient/network error we should surface rather than misread as "no scope".
+export function isScopeError(e){
+  return !!e && (e.code === 'NOSCOPE' || /\b40[34]\b/.test(e.message || ''));
+}
+
 // GET the repo Actions public key. Throwing on 403 is the signal the token lacks Secrets:write.
 export async function getPublicKey(tok){
   const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/secrets/public-key`, { headers:hdr(tok), cache:'no-store' });

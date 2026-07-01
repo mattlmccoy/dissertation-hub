@@ -1,6 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { PROVIDERS, detectProvider, genKey } from '../js/ghsecrets.js';
+import { PROVIDERS, detectProvider, genKey, isScopeError } from '../js/ghsecrets.js';
+
+// A missing-permission error (NOSCOPE, or any 403/404 like latestRun's 'runs 403') must be treated
+// as "token lacks scope" so the flow prompts for a fuller token — while transient errors are NOT.
+test('isScopeError distinguishes permission errors from transient ones', () => {
+  assert.strictEqual(isScopeError(Object.assign(new Error('no-secret-scope'), { code:'NOSCOPE' })), true);
+  assert.strictEqual(isScopeError(new Error('runs 403')), true);   // the reported failure
+  assert.strictEqual(isScopeError(new Error('secret SMTP_USER: 404')), true);
+  assert.strictEqual(isScopeError(new Error('runs 500')), false);  // server error — surface it
+  assert.strictEqual(isScopeError(new Error('timeout')), false);
+  assert.strictEqual(isScopeError(null), false);
+});
 
 test('detectProvider maps domains', () => {
   assert.strictEqual(detectProvider('a@gmail.com'), 'gmail');
