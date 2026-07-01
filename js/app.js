@@ -2029,6 +2029,18 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
     };
     render();
   };
+  // Turn an SMTP error into an actionable, provider-specific hint. "Login denied"/535/auth means the
+  // username or key was rejected — the #1 cause is using the account password instead of the app key.
+  const authHint = (provider, err) => {
+    const isAuth = /login denied|535|5\.7\.|authenticat|credential|\(67\)/i.test(err || '');
+    if (!isAuth) return 'Go Back, fix the setting, and try again.';
+    switch (provider){
+      case 'brevo':   return 'The server rejected your login. In Brevo → <b>SMTP &amp; API → SMTP</b>: the password must be the <b>SMTP key</b> (not your account password), and the sending address must be the <b>Login</b> shown on that page (your Brevo account email). Also make sure your Brevo account is activated for sending.';
+      case 'gmail':   return 'Gmail rejected the login. The password must be a 16-char <b>App Password</b> (not your normal Google password), and 2-Step Verification must be ON.';
+      case 'outlook': return 'The server rejected the login. Use an <b>app password</b> (not your normal password); work/school accounts create it in your IT security portal.';
+      default:        return 'The server rejected the username/password — double-check both (the password should be your provider\'s app password / API key, not your login).';
+    }
+  };
   // Do the actual work from the wizard's collected state: verify token can write secrets AND run
   // Actions, write the secrets/vars, fire a real test send, and report the true outcome.
   const runConnect = async (S, stat) => {
@@ -2076,7 +2088,7 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
         renderEmailBanner(); renderAdvList();
       } else {
         const err = json?.email_test?.error || ('run concluded: ' + run.conclusion);
-        stat.innerHTML = 'Test send failed: <code>' + escapeHtml(err) + '</code>. Go Back, fix the key, and try again.';
+        stat.innerHTML = 'Test send failed: <code>' + escapeHtml(err) + '</code><br>' + authHint(S.provider, err);
       }
     } catch(e){
       if (isScopeError(e)) stat.innerHTML = 'Your GitHub token is missing <b>Actions</b> access — go Back and regenerate it with the <b>repo</b> box ticked.';
