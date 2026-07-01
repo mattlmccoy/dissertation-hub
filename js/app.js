@@ -1382,9 +1382,10 @@ async function loadOwnerOutline(){
   } catch(e){}
   if (!data){ read.innerHTML = `<div class="empty">Couldn't load the outline. Open a chapter once to connect your token, then retry.</div>`; return; }
   renderOwnerOutline(data); renderComments(); syncDown();
+  loadAdvisorComments('__outline__').then(() => renderOwnerOutline(data));   // pull advisor outline comments into the rail + refresh node badges
 }
 function renderOwnerOutline(data){
-  const cnt = (label, sec) => review.comments.filter(c => c.anchor?.quote===label && c.anchor?.section===sec).length;
+  const cnt = (label, sec) => review.comments.concat(advisorComments).filter(c => c.anchor?.quote===label && c.anchor?.section===sec).length;   // count your notes AND advisor comments on this node
   const badge = n => n ? `<i class="ti ti-message"></i>${n}` : `<i class="ti ti-message-plus"></i>`;
   const node = (title, synopsis, sec, cls) => `<div class="ol-node ${cls}"><div class="ol-srow"><span class="ol-slabel">${escapeHtml(title)}</span>${synopsis?`<span class="ol-syn">${escapeHtml(synopsis)}</span>`:''}</div>
       <button class="ol-cmt" data-node="${escapeHtml(title)}" data-sec="${escapeHtml(sec)}">${badge(cnt(title, sec))}</button></div>`;
@@ -1834,6 +1835,7 @@ async function openReleasePanel(){
   document.querySelectorAll('.rel-row').forEach(el => {
     const a = el.dataset.a, ch = el.dataset.ch, cid = el.dataset.cid;
     el.querySelector('.rel-open').onclick = () => {
+      if (ch === '__outline__'){ loadOwnerOutline(); return; }   // outline comments open the outline view, not a chapter
       enterChapter(ch);
       jumpWhenReady({ id: cid, anchor: { quote: el.dataset.q, section: el.dataset.sec || '' } });
     };
