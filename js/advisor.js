@@ -9,8 +9,8 @@ import { startTour, tourSeen, markTourSeen } from './tour.js?v=6b4cfbe';
 // only spotlights and explains — nothing here is ever sent or saved.
 function loadDemoChapter(){
   const el = document.getElementById('read'); if (!el) return () => {};
+  const wasReading = !!document.querySelector('#doc');   // was a real chapter open before the demo?
   const cmt = document.getElementById('comments');
-  const prevRead = el.innerHTML, prevCmt = cmt ? cmt.innerHTML : '', prevDisp = cmt ? cmt.style.display : '';
   const fig = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="520" height="200"><rect width="520" height="200" fill="#e9e7e1"/><text x="260" y="106" font-family="sans-serif" font-size="16" fill="#8f8d84" text-anchor="middle">Sample figure</text></svg>');
   el.innerHTML = `<article id="doc">
     <h1>Chapter 3 · Sample (tour preview)</h1>
@@ -31,7 +31,9 @@ function loadDemoChapter(){
         <span class="chip" style="background:var(--wording-bg);color:var(--wording)">wording</span></div>
       <button id="tour-demo-submit" class="btn btn-primary" style="width:100%;justify-content:center"><i class="ti ti-send"></i>Submit comments</button>`;
   }
-  return () => { el.innerHTML = prevRead; if (cmt){ cmt.innerHTML = prevCmt; cmt.style.display = prevDisp; } };
+  // Teardown must RE-RENDER the real view (not paste back innerHTML) — restoring an HTML string
+  // creates fresh nodes with no event handlers, leaving the page looking right but unclickable.
+  return () => { if (wasReading && current) loadChapter(current); else enterHome(); };
 }
 // First-run walkthrough of the whole review pipeline, on interactive demo content. Spotlight-explain;
 // the demo is live so text-select and figure-click actually work, but nothing is sent or saved.
