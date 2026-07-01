@@ -1939,14 +1939,14 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
     const render = () => {
       const P = PROVIDERS[S.provider] || {};
       if (S.step === 'provider'){
-        const cards = [['brevo','Brevo','Easiest — free, one key, no 2-Step Verification'],
-                       ['gmail','Gmail','Uses a Gmail App Password (needs 2-Step on)'],
-                       ['outlook','Outlook / Office 365','Personal, or work/school'],
-                       ['custom','Other','Any email provider — you enter the details']]
+        const cards = [['gmail','Gmail','Works from any personal Gmail — one App Password, nothing else.'],
+                       ['outlook','Outlook / Office 365','Work/school or personal Microsoft accounts.'],
+                       ['custom','Other / institutional email','Your university or work SMTP — enter host, port, login, key.'],
+                       ['brevo','Brevo (advanced)','Only if you own a domain to authenticate — NOT for @gmail senders.']]
           .map(([id, name, desc]) => `<button class="ce-pick btn" data-id="${id}" style="display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:7px">
-             <div style="font-weight:600;font-size:12.5px">${name}${id === 'brevo' ? ' <span style="color:var(--success)">· recommended</span>' : ''}</div>
+             <div style="font-weight:600;font-size:12.5px">${name}${id === 'gmail' ? ' <span style="color:var(--success)">· recommended</span>' : ''}</div>
              <div style="color:var(--text-3);font-size:11.5px;margin-top:1px">${desc}</div></button>`).join('');
-        box.innerHTML = frame('Connect email', `<div style="font-size:12px;color:var(--text-3);margin-bottom:9px">Which email should the invites be sent from?</div>${cards}`, cancelBtn);
+        box.innerHTML = frame('Connect email', `<div style="font-size:12px;color:var(--text-3);margin-bottom:9px">Which email should the invites be sent from? Use an account you already own — most people pick Gmail or their university email.</div>${cards}`, cancelBtn);
         box.querySelectorAll('.ce-pick').forEach(b => b.onclick = () => { S.provider = b.dataset.id; S.step = 'key'; render(); });
         wireCommon();
         return;

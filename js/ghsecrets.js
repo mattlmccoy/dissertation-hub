@@ -8,11 +8,12 @@ const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.git
 // EXACT page where the owner generates the app password / API key that goes in the password field —
 // which is never their normal account login password.
 export const PROVIDERS = {
-  brevo:    { id:'brevo',    label:'Brevo — recommended (one key, no 2-Step)', host:'smtp-relay.brevo.com', port:587, domains:[], recommended:true,
+  brevo:    { id:'brevo',    label:'Brevo (advanced — needs your own domain)', host:'smtp-relay.brevo.com', port:587, domains:[],
               secretWord:'SMTP key', keyUrl:'https://app.brevo.com/settings/keys/smtp', keyLabel:'Open Brevo — SMTP & API',
               separateLogin:true,
               loginHint:'Brevo’s SMTP Login (looks like 12345@smtp-brevo.com) — NOT your account email',
-              howto:['In Brevo, open Settings → SMTP & API → SMTP tab.',
+              howto:['Only use Brevo if you own a domain you can authenticate — you CANNOT send from @gmail.com through it.',
+                     'In Brevo, open Settings → SMTP & API → SMTP tab.',
                      'Copy the "Login" shown there (looks like 12345@smtp-brevo.com) — this is the username, not your account email.',
                      'Click "Generate SMTP key", name it, and copy the key.',
                      'IMPORTANT: turn OFF IP blocking — Settings → Security → Authorized IPs → keep "Activate for SMTP keys" DEACTIVATED (GitHub’s servers use changing IPs, so blocking rejects them).',
