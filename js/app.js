@@ -9,12 +9,16 @@ import { startTour, tourSeen } from './tour.js?v=90dd8b2';
 // Guided owner tour: spotlights each feature. before() only reveals UI (opens the release panel),
 // never sends/saves. The engine skips any step whose element is absent, so it degrades gracefully.
 const OWNER_TOUR = [
-  { sel:'#topbar', title:'Welcome to your reviewer', body:'Your chapters and the comments you receive appear below. Setup and management live up here.' },
-  { sel:'#btn-more', title:'The menu', body:'Your GitHub access token, keyboard shortcuts, and this tour live in this ⋯ menu.' },
-  { sel:'#btn-releases', title:'Release to advisors', body:'This opens the panel where you invite advisors and choose who sees which chapters.' },
+  { sel:'#topbar', title:'Welcome to your reviewer', body:'This is your control center: read chapters, collect advisor comments, and manage releases — all here.' },
+  { sel:'#nav', title:'Your chapters', body:'Every chapter of your document. Click one to open it, then select text or a figure to leave yourself a note.' },
+  { sel:'#inbox-panel', title:'Comments from advisors', body:'Everything your reviewers leave lands here, grouped by person and chapter — reply, resolve, or address each one.' },
+  { sel:'#btn-export', title:'Export with comments', body:'Download any chapter (or the whole document) as Word, PDF, or Markdown — with comments and tracked changes baked in.' },
+  { sel:'#home-downloads', title:'Your downloads', body:'Finished exports collect here, versioned and ready to hand off.' },
+  { sel:'#btn-theme', title:'Light / dark', body:'Switch the whole app between light and dark mode anytime.' },
+  { sel:'#btn-releases', title:'Release to advisors', body:'Open this to invite advisors and choose who sees which chapters.' },
   { sel:'#adv-email-banner', title:'Connect email (once)', body:'Set up sending once and advisor invites go out automatically. Pick Gmail (an App Password) or your university email.', before:() => openReleasePanel() },
-  { sel:'.advadd', title:'Add an advisor', body:'Enter a name + email to create their private review portal and send them an invite with a link and access key.' },
-  { sel:'.rel-tbl', title:'Who sees what', body:'Tick the chapters each advisor may review, then Save & publish. Their comments come back into your inbox below.' },
+  { sel:'.advadd', title:'Add an advisor', body:'Enter a name + email to create their private review portal and send an invite with a link and access key.' },
+  { sel:'.rel-tbl', title:'Who sees what', body:'Tick the chapters each advisor may review, then Save & publish. Their comments flow back into your inbox above.' },
 ];
 function launchOwnerTour(){ startTour(OWNER_TOUR, { storageKey:'tour-owner-v1' }); }
 if (!tourSeen('tour-owner-v1')) setTimeout(() => { try { launchOwnerTour(); } catch {} }, 1400);
