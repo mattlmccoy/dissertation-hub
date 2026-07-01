@@ -4,7 +4,7 @@ import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl,
 import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub, isScopeError } from './ghsecrets.js?v=32f427f';
 import { sealToBase64 } from './vendor/seal.js?v=32f427f';
 import { isConfigured as ghAppConfigured, startDeviceLogin, pollForToken } from './ghauth.js?v=32f427f';
-import { startTour, tourSeen } from './tour.js?v=32f427f';
+import { startTour, tourSeen, markTourSeen } from './tour.js?v=32f427f';
 
 // Guided owner tour: spotlights each feature. before() only reveals UI (opens the release panel),
 // never sends/saves. The engine skips any step whose element is absent, so it degrades gracefully.
@@ -21,7 +21,9 @@ const OWNER_TOUR = [
   { sel:'.rel-tbl', title:'Who sees what', body:'Tick the chapters each advisor may review, then Save & publish. Their comments flow back into your inbox above.' },
 ];
 function launchOwnerTour(){ startTour(OWNER_TOUR, { storageKey:'tour-owner-v1' }); }
-if (!tourSeen('tour-owner-v1')) setTimeout(() => { try { launchOwnerTour(); } catch {} }, 1400);
+// Mark seen the moment it auto-launches (not just on finish) so a hard refresh never re-triggers it
+// for a returning user. The ⋯ menu lets them replay it or turn auto-show back on.
+if (!tourSeen('tour-owner-v1')){ markTourSeen('tour-owner-v1'); setTimeout(() => { try { launchOwnerTour(); } catch {} }, 1400); }
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
@@ -1736,14 +1738,18 @@ function openMoreMenu(){
   const menu = document.createElement('div'); menu.id = 'moremenu';
   menu.style.cssText = 'position:absolute;top:50px;right:14px;z-index:45;background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-md);box-shadow:0 10px 30px rgba(0,0,0,.16);padding:6px;min-width:220px';
   const hasTok = !!tok();
+  const autoOff = tourSeen('tour-owner-v1');   // true = tour won't auto-show for returning users
   menu.innerHTML = `
     <div class="mmi" data-act="release"><i class="ti ti-users"></i>Release to advisors…</div>
     <div class="mmi" data-act="help"><i class="ti ti-keyboard"></i>Buttons & shortcuts</div>
     <div class="mmi" data-act="token"><i class="ti ti-key"></i>Access token${hasTok?' <span style="color:var(--success);font-size:11px;margin-left:auto">connected</span>':' <span style="color:var(--warn);font-size:11px;margin-left:auto">not set</span>'}</div>
     <div class="mmi" data-act="tour"><i class="ti ti-help-circle"></i>Take the tour</div>
+    <div class="mmi" data-act="tourtoggle"><i class="ti ti-${autoOff?'eye-off':'eye-check'}"></i>Auto-show tour: ${autoOff?'off — turn on':'on — turn off'}</div>
     <div class="mmi" data-act="dash"><i class="ti ti-layout-dashboard"></i>Back to dashboard</div>`;
   document.body.appendChild(menu);
-  const acts = { release: openReleasePanel, help: toggleHelp, token: manageToken, dash: () => location.href = './index.html', tour: launchOwnerTour };
+  const acts = { release: openReleasePanel, help: toggleHelp, token: manageToken, dash: () => location.href = './index.html', tour: launchOwnerTour,
+    tourtoggle: () => { if (tourSeen('tour-owner-v1')){ localStorage.removeItem('tour-owner-v1'); flash('Auto-tour turned on — it\'ll show on next load.'); }
+      else { markTourSeen('tour-owner-v1'); flash('Auto-tour turned off.'); } } };
   menu.querySelectorAll('.mmi').forEach(el => { el.onmouseenter = () => el.style.background='var(--bg-3)'; el.onmouseleave = () => el.style.background='transparent';
     el.onclick = () => { menu.remove(); acts[el.dataset.act](); }; });
   setTimeout(() => document.addEventListener('click', function h(e){ if (!menu.contains(e.target) && e.target.id!=='btn-more' && !e.target.closest?.('#btn-more')){ menu.remove(); document.removeEventListener('click', h); } }), 0);

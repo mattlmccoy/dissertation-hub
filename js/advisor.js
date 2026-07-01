@@ -2,7 +2,7 @@
 // them, lets them comment on text and figures and propose exact edits, and submits those back
 // privately. Self-contained (only the anchor helper is shared) — no build tooling of any kind.
 import { anchorFromSelection } from './anchor.js?v=32f427f';
-import { startTour, tourSeen } from './tour.js?v=32f427f';
+import { startTour, tourSeen, markTourSeen } from './tour.js?v=32f427f';
 
 // A sample chapter shown ONLY during the tour, so the reading + commenting features have real-looking
 // content to point at even before any real chapter is released. Restored when the tour ends. The tour
@@ -1093,7 +1093,8 @@ async function boot(){ keyBad = false; revoked = false; await loadRelease(); if 
   startOutbox(); retryPending(); renderBanner();
   ensureTourButton();
   // Only auto-run once the reviewer is actually in (has an access key) — never over the login screen.
-  if (tok() && !tourSeen('tour-advisor-v1')) setTimeout(() => { try { launchAdvisorTour(); } catch {} }, 1400); }
+  // Mark seen at launch (not just on finish) so a hard refresh doesn't re-show it to a returning reviewer.
+  if (tok() && !tourSeen('tour-advisor-v1')){ markTourSeen('tour-advisor-v1'); setTimeout(() => { try { launchAdvisorTour(); } catch {} }, 1400); } }
 // Floating replay button (always available); appended once.
 function ensureTourButton(){
   if (document.getElementById('adv-tour-btn')) return;
