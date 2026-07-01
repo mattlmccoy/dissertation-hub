@@ -350,6 +350,14 @@ body.focusmode #doc{max-width:760px}
 .help-row .help-ic{flex:0 0 130px;display:flex;justify-content:center}.help-row .help-ic i{font-size:17px;color:var(--text)}
 #moremenu .mmi{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
 #moremenu .mmi i{font-size:16px;color:var(--text-2)}
+.tour-overlay{position:fixed;inset:0;z-index:9999;pointer-events:none}
+.tour-overlay .tour-cut{position:fixed;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.55);transition:all .18s ease;pointer-events:none}
+.tour-overlay .tour-tip{position:fixed;background:var(--bg);color:var(--text);border:.5px solid var(--border);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:12px 13px;pointer-events:auto;font-size:12.5px;line-height:1.5}
+.tour-overlay .tour-tip-title{font-weight:600;font-size:13px;margin-bottom:4px}
+.tour-overlay .tour-tip-body{color:var(--text-2)}
+.tour-overlay .tour-tip-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.tour-overlay .tour-tip-prog{font-size:11px;color:var(--text-3)}
+.tour-overlay .tour-tip .btn{padding:3px 10px;font-size:11.5px}
 </style>
 </head>
 <body>

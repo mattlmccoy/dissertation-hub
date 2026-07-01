@@ -253,3 +253,11 @@ html.dark #syncbanner{color:#ffd98a;background:#3a2e12;border-color:#6b5320} htm
 .figmk-actions{display:flex;gap:8px;margin-top:10px}
 .cmarkup{margin-top:8px;border:.5px solid var(--border);border-radius:7px;overflow:hidden;max-width:240px}
 .cmarkup img{display:block;width:100%;height:auto}
+.tour-overlay{position:fixed;inset:0;z-index:9999;pointer-events:none}
+.tour-overlay .tour-cut{position:fixed;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.55);transition:all .18s ease;pointer-events:none}
+.tour-overlay .tour-tip{position:fixed;background:var(--bg);color:var(--text);border:.5px solid var(--border);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:12px 13px;pointer-events:auto;font-size:12.5px;line-height:1.5}
+.tour-overlay .tour-tip-title{font-weight:600;font-size:13px;margin-bottom:4px}
+.tour-overlay .tour-tip-body{color:var(--text-2)}
+.tour-overlay .tour-tip-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.tour-overlay .tour-tip-prog{font-size:11px;color:var(--text-3)}
+.tour-overlay .tour-tip .btn{padding:3px 10px;font-size:11.5px}
