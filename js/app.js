@@ -1,8 +1,8 @@
-import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=d93b806';
-import { anchorFromSelection } from './anchor.js?v=d93b806';
-import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=d93b806';
-import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub } from './ghsecrets.js?v=dev';
-import { sealToBase64 } from './vendor/seal.js?v=dev';
+import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=a766ce6';
+import { anchorFromSelection } from './anchor.js?v=a766ce6';
+import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=a766ce6';
+import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub } from './ghsecrets.js?v=a766ce6';
+import { sealToBase64 } from './vendor/seal.js?v=a766ce6';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
