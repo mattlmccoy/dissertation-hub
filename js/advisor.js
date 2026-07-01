@@ -466,9 +466,10 @@ function _railFilterSort(active){
     const hay=((c.body||'')+' '+(c.anchor&&c.anchor.quote||'')).toLowerCase();
     return hay.includes(q);
   });
-  if(f.sort==='new') cs=[...cs].sort((a,b)=>(b.created_ts||'').localeCompare(a.created_ts||''));
+  const cts=c=>String(c.created_ts ?? '');   // coerce: a numeric created_ts must never crash the sort (localeCompare is String-only)
+  if(f.sort==='new') cs=[...cs].sort((a,b)=>cts(b).localeCompare(cts(a)));
   else { const ord=_railDocOrder(); const pos=c=>(c.id in ord)?ord[c.id]:1e6;
-    cs=[...cs].sort((a,b)=>(pos(a)-pos(b))||(a.created_ts||'').localeCompare(b.created_ts||'')); }
+    cs=[...cs].sort((a,b)=>(pos(a)-pos(b))||cts(a).localeCompare(cts(b))); }
   return cs;
 }
 function suggHtml(c){ if(!c.edit) return ''; const e=c.edit, find=escapeHtml((e.find||'').slice(0,140)), repl=escapeHtml((e.replacement||'').slice(0,240));
