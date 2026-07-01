@@ -2109,8 +2109,17 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
       const { json } = await getJson(tok(), 'advisors.json').catch(() => ({ json:null }));
       if (json){ advReg.email_configured = json.email_configured; }
       if (run.conclusion === 'success' && json?.email_test?.ok){
-        flash('✅ Test email delivered to ' + testTo + '.');
-        renderEmailBanner(); renderAdvList();
+        flash('✅ Email connected — test sent.');
+        // The mail server ACCEPTED it; the recipient's spam filter may still hold it. Say so plainly
+        // (a persistent panel, not a toast) so the owner knows to check spam, not assume failure.
+        const box = document.getElementById('adv-email-banner');
+        if (box) box.innerHTML = `<div style="border:.5px solid var(--success);border-radius:9px;padding:13px;margin-bottom:12px;font-size:12.5px;line-height:1.55">
+            <div style="font-weight:600;color:var(--success);margin-bottom:4px"><i class="ti ti-circle-check"></i> Email connected — invites will send automatically</div>
+            The test was sent to <b>${escapeHtml(testTo)}</b>. If it isn't in the inbox within a minute, check <b>Spam/Junk</b> and any quarantine — automated mail often lands there the first time. Mark it “not spam” so future invites arrive normally.
+            <div style="margin-top:9px"><button id="ce-done" class="btn" style="padding:4px 11px;font-size:12px">Done</button></div></div>`;
+        const d = document.getElementById('ce-done'); if (d) d.onclick = () => renderEmailBanner();
+        renderAdvList();
+        return;
       } else {
         const err = json?.email_test?.error || ('run concluded: ' + run.conclusion);
         stat.innerHTML = 'Test send failed: <code>' + escapeHtml(err) + '</code><br>' + authHint(S.provider, err);
