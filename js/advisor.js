@@ -2,6 +2,15 @@
 // them, lets them comment on text and figures and propose exact edits, and submits those back
 // privately. Self-contained (only the anchor helper is shared) — no build tooling of any kind.
 import { anchorFromSelection } from './anchor.js?v=c1bd964';
+import { startTour, tourSeen } from './tour.js?v=dev';
+
+// Short first-run tour of the reading + commenting surface. Non-destructive spotlight only.
+const ADVISOR_TOUR = [
+  { sel:'#nav', title:'Released chapters', body:'The chapters the author shared with you. Click one to open it on a clean reading page.' },
+  { sel:'#read', title:'Read and mark up', body:'Select any text, or click a figure, to attach a note right where it matters.' },
+  { sel:'#comments', title:'Your notes', body:'Everything you leave shows here, private to the author. In a note you can also propose exact wording for them to accept in one click.' },
+];
+function launchAdvisorTour(){ startTour(ADVISOR_TOUR, { storageKey:'tour-advisor-v1' }); }
 
 // --- comment model (self-contained) ---
 let _seq = 0; const nid = () => `c_${Date.now().toString(36)}_${(_seq++).toString(36)}`;
@@ -1053,7 +1062,19 @@ function setupMobileSheet(){
 // ---------- boot ----------
 async function boot(){ keyBad = false; revoked = false; await loadRelease(); if (revoked){ showRevoked(); return; } if (keyBad && tok()){ showKeyExpired(); return; }
   if (SHARED && tok() && !reviewerName()){ showNameEntry(); return; } enterHome();
-  startOutbox(); retryPending(); renderBanner(); }
+  startOutbox(); retryPending(); renderBanner();
+  ensureTourButton();
+  if (!tourSeen('tour-advisor-v1')) setTimeout(() => { try { launchAdvisorTour(); } catch {} }, 1400); }
+// Floating replay button (always available); appended once.
+function ensureTourButton(){
+  if (document.getElementById('adv-tour-btn')) return;
+  const b = document.createElement('button');
+  b.id = 'adv-tour-btn'; b.title = 'Tour'; b.className = 'icbtn';
+  b.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;width:36px;height:36px;border-radius:50%;background:var(--bg);border:.5px solid var(--border-2);box-shadow:0 4px 14px rgba(0,0,0,.14)';
+  b.innerHTML = '<i class="ti ti-help-circle"></i>';
+  b.onclick = launchAdvisorTour;
+  document.body.appendChild(b);
+}
 // outbox heartbeat: retry any unconfirmed local edits on a timer, when the tab regains focus,
 // and when connectivity returns — so a comment written offline still reaches GitHub later.
 let outboxStarted = false;
