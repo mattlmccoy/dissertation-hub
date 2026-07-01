@@ -1,6 +1,6 @@
 # Vendored crypto (do not edit)
 
-Used only by `seal.mjs` to sealed-box encrypt GitHub Actions secret values in the browser
+Used only by `seal.js` to sealed-box encrypt GitHub Actions secret values in the browser
 (GitHub's Secrets API requires libsodium `crypto_box_seal` ciphertext). No backend, no build step.
 
 - `nacl.min.js` — tweetnacl 1.0.3 (MIT, https://github.com/dchest/tweetnacl-js).
@@ -8,7 +8,7 @@ Used only by `seal.mjs` to sealed-box encrypt GitHub Actions secret values in th
 - `blake2b.js` — self-contained BLAKE2b composed from blakejs 1.2.1 (MIT,
   https://github.com/dcposch/blakejs): `util.js` inlined into `blake2b.js`, exposed as
   `globalThis.blake2bLib`. Verified against the RFC 7693 `blake2b("abc")` vector.
-- `seal.mjs` — implements `crypto_box_seal` (`epk || crypto_box(m, BLAKE2b(epk||rpk,24), rpk, esk)`),
+- `seal.js` — implements `crypto_box_seal` (`epk || crypto_box(m, BLAKE2b(epk||rpk,24), rpk, esk)`),
   byte-identical to libsodium so GitHub decrypts server-side. `sealWith(nacl, blake2b, pubB64, val)`
   is the pure/testable core; `sealToBase64(pubB64, val)` binds the browser globals.
 

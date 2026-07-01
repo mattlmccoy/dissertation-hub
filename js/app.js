@@ -1,6 +1,8 @@
 import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=d93b806';
 import { anchorFromSelection } from './anchor.js?v=d93b806';
 import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=d93b806';
+import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub } from './ghsecrets.js?v=dev';
+import { sealToBase64 } from './vendor/seal.js?v=dev';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
@@ -1844,8 +1846,11 @@ async function openReleasePanel(){
         <div style="display:flex;gap:8px;align-items:flex-start">
           <i class="ti ti-alert-triangle" style="color:var(--warn);font-size:15px;margin-top:1px"></i>
           <div style="font-size:12.5px;line-height:1.5;color:var(--text)">
-            <b>Email invites aren't set up yet.</b> You can still add advisors and open their portals — but no invite email is sent automatically. Copy each advisor's portal link (and the access key) and send it yourself, or set up sending once so future invites go out on their own.
-            <button id="adv-email-toggle" class="btn" style="margin-top:9px;padding:3px 10px;font-size:11.5px"><i class="ti ti-settings"></i>Set up email invites</button>
+            <b>Email invites aren't set up yet.</b> You can still add advisors and open their portals — but no invite email is sent automatically. Connect email once and future invites go out on their own; until then, copy each advisor's portal link and send it yourself.
+            <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+              <button id="adv-email-connect" class="btn btn-primary" style="padding:4px 11px;font-size:11.5px"><i class="ti ti-plug"></i>Connect email</button>
+              <button id="adv-email-toggle" class="btn" style="padding:4px 10px;font-size:11.5px"><i class="ti ti-book"></i>Set it up manually</button>
+            </div>
           </div>
         </div>
         <div id="adv-email-guide" style="display:none;margin:11px 0 2px;padding-top:11px;border-top:.5px solid var(--warn);font-size:12px;line-height:1.6;color:var(--text-2)">
@@ -1876,6 +1881,100 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
       </div>`;
     const tg = document.getElementById('adv-email-toggle');
     if (tg) tg.onclick = () => { const g = document.getElementById('adv-email-guide'); if (g) g.style.display = g.style.display === 'none' ? 'block' : 'none'; };
+    const cbtn = document.getElementById('adv-email-connect');
+    if (cbtn) cbtn.onclick = openConnectForm;
+  };
+  const inputCss = 'width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)';
+  // ---- Connect email: write SMTP secrets to the data repo + real test send (owner-only) ----
+  const openConnectForm = async () => {
+    const box = document.getElementById('adv-email-banner'); if (!box) return;
+    const pf = await prefillFromGitHub(tok()).catch(() => ({ name:'', email:'' }));
+    const opts = Object.values(PROVIDERS).map(p => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join('');
+    box.innerHTML = `
+      <div style="border:.5px solid var(--border);border-radius:9px;padding:13px;margin-bottom:12px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:9px"><i class="ti ti-plug"></i> Connect email</div>
+        <div style="display:grid;gap:8px;font-size:12.5px">
+          <label>From address / SMTP username<input id="ce-user" type="email" placeholder="you@example.com" style="${inputCss}"></label>
+          <label>Provider<select id="ce-prov" style="${inputCss}"><option value="">Choose a provider…</option>${opts}</select></label>
+          <div id="ce-passhint" style="font-size:11px;color:var(--text-3);margin-top:-3px"></div>
+          <div style="display:grid;grid-template-columns:1fr 90px;gap:8px">
+            <label>SMTP host<input id="ce-host" style="${inputCss}"></label>
+            <label>Port<input id="ce-port" style="${inputCss}"></label>
+          </div>
+          <label>Password / API key<input id="ce-pass" type="password" placeholder="app password or API key" style="${inputCss}"></label>
+          <label>Your name (shown in the invite)<input id="ce-name" value="${escapeHtml(pf.name)}" style="${inputCss}"></label>
+          <label>Send a test to<input id="ce-test" type="email" value="${escapeHtml(pf.email)}" style="${inputCss}"></label>
+          <div style="font-size:11px;color:var(--text-3)">An access key for advisors is generated automatically. Your site URL is filled in for you.</div>
+          <div id="ce-stat" style="font-size:12px;color:var(--text-3);min-height:16px"></div>
+          <div style="display:flex;gap:8px"><button id="ce-go" class="btn btn-primary" style="padding:5px 12px;font-size:12px"><i class="ti ti-check"></i>Connect &amp; send test</button>
+            <button id="ce-cancel" class="btn" style="padding:5px 12px;font-size:12px">Cancel</button></div>
+        </div>
+      </div>`;
+    const $ = id => document.getElementById(id);
+    const applyProv = pid => { const p = PROVIDERS[pid]; if (!p) return;
+      $('ce-host').value = p.host; $('ce-port').value = p.port; $('ce-passhint').textContent = p.passHint ? 'Password field: ' + p.passHint : '';
+      if (p.userFixed){ $('ce-user').value = p.userFixed; $('ce-user').readOnly = true; } else { $('ce-user').readOnly = false; } };
+    $('ce-user').oninput = () => { const d = detectProvider($('ce-user').value); if (d && !$('ce-prov').value){ $('ce-prov').value = d; applyProv(d); } };
+    $('ce-prov').onchange = () => applyProv($('ce-prov').value);
+    $('ce-cancel').onclick = () => renderEmailBanner();
+    $('ce-go').onclick = () => connectEmail($);
+  };
+  const connectEmail = async ($) => {
+    const stat = $('ce-stat');
+    const user = $('ce-user').value.trim(), pass = $('ce-pass').value, host = $('ce-host').value.trim(),
+          port = $('ce-port').value.trim(), name = $('ce-name').value.trim(), testTo = $('ce-test').value.trim();
+    if (!user || !pass){ stat.textContent = 'From address and password/API key are required.'; return; }
+    if (!host || !port){ stat.textContent = 'SMTP host and port are required — pick a provider.'; return; }
+    if (!testTo){ stat.textContent = 'Enter an address to send the test to.'; return; }
+    stat.textContent = 'Checking your token…';
+    // 1) elevated token: try the stored token; on NOSCOPE ask for a one-time token (not stored).
+    let etok = tok(), pk;
+    try { pk = await getPublicKey(etok); }
+    catch(e){
+      if (e.code !== 'NOSCOPE'){ stat.textContent = 'Token check failed: ' + e.message; return; }
+      const url = 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=RFAM%20email%20setup';
+      window.open(url, '_blank', 'noopener');
+      const t2 = prompt('Your saved token can\'t write secrets. A GitHub page opened — click Generate token, then paste it here (used once, not saved):');
+      if (!t2){ stat.textContent = 'Cancelled.'; return; }
+      etok = t2.trim();
+      try { pk = await getPublicKey(etok); } catch(e2){ stat.textContent = 'That token still can\'t write secrets (' + (e2.message || e2.code) + ').'; return; }
+    }
+    try {
+      // 2) write secrets + variables
+      stat.textContent = 'Saving credentials…';
+      const key = genKey();
+      await putSecret(etok, pk, sealToBase64, 'SMTP_USER', user);
+      await putSecret(etok, pk, sealToBase64, 'SMTP_PASS', pass);
+      await putSecret(etok, pk, sealToBase64, 'SMTP_HOST', host);
+      await putSecret(etok, pk, sealToBase64, 'SMTP_PORT', port);
+      await putSecret(etok, pk, sealToBase64, 'ADVISOR_KEY', key);
+      if (name) await putSecret(etok, pk, sealToBase64, 'SMTP_FROM_NAME', name);
+      if (name) await setVariable(etok, 'AUTHOR_NAME', name);
+      await setVariable(etok, 'PORTAL_BASE', portalBase());
+      // 3) fire the test + poll
+      stat.textContent = 'Sending a test email…';
+      const before = (await latestRun(etok))?.id || 0;
+      await dispatchInvite(etok, testTo);
+      etok = null;   // drop the elevated token
+      const deadline = Date.now() + 90000; let run = null;
+      while (Date.now() < deadline){
+        await new Promise(r => setTimeout(r, 4000));
+        run = await latestRun(tok());
+        if (run && run.id !== before && run.status === 'completed') break;
+      }
+      if (!run || run.status !== 'completed'){ stat.innerHTML = 'Saved, but the test run didn\'t finish in time. Check the Actions tab, then reload.'; return; }
+      // 4) read the recorded outcome
+      const { json } = await getJson(tok(), 'advisors.json').catch(() => ({ json:null }));
+      if (json){ advReg.email_configured = json.email_configured; }
+      if (run.conclusion === 'success' && json?.email_test?.ok){
+        flash('✅ Test email delivered to ' + testTo + '.');
+        renderEmailBanner();            // clears (email_configured now true)
+        renderAdvList();
+      } else {
+        const err = json?.email_test?.error || ('run concluded: ' + run.conclusion);
+        stat.innerHTML = 'Test send failed: <code>' + escapeHtml(err) + '</code>. Fix the credential and Connect again.';
+      }
+    } catch(e){ stat.textContent = 'Failed: ' + e.message; }
   };
   const renderAdvList = () => {
     renderEmailBanner();

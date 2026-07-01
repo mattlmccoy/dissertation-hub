@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
-import { sealWith } from '../js/vendor/seal.mjs';
+import { sealWith } from '../js/vendor/seal.js';
 
 const require = createRequire(import.meta.url);
 const nacl = require('../js/vendor/nacl.min.js');   // UMD → module.exports = nacl
