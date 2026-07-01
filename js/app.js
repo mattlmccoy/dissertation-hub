@@ -3,6 +3,7 @@ import { anchorFromSelection } from './anchor.js?v=a2ea10c';
 import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=a2ea10c';
 import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub, isScopeError } from './ghsecrets.js?v=a2ea10c';
 import { sealToBase64 } from './vendor/seal.js?v=a2ea10c';
+import { isConfigured as ghAppConfigured, startDeviceLogin, pollForToken } from './ghauth.js?v=dev';
 
 const DATA_REPO = 'mattlmccoy/dissertation-tracker-data';
 const CHAPTERS = [
@@ -1978,14 +1979,40 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
         return;
       }
       if (S.step === 'token'){
+        // One-click path (only once the GitHub App + relay are provisioned) vs manual-token fallback.
+        const oneClick = ghAppConfigured() ? `
+          <button id="ce-ghconnect" class="btn btn-primary" style="padding:6px 13px;font-size:12.5px;display:inline-flex;align-items:center;gap:5px"><i class="ti ti-brand-github"></i> Connect with GitHub</button>
+          <div id="ce-ghcode" style="font-size:12px;color:var(--text-2);margin-top:8px"></div>
+          <div style="font-size:11px;color:var(--text-3);margin:10px 0 6px">or paste a one-time token manually:</div>` : `
+          <div style="font-size:12px;line-height:1.6;color:var(--text-2)">To <b>save</b> these settings, GitHub needs a one-time token (used once, never stored). It's separate from your email — your saved login can read your files but can't store settings.</div>
+          <ol style="margin:9px 0 9px 17px;padding:0;font-size:12px;line-height:1.65;color:var(--text-2)"><li>Click <b>Generate token</b> below.</li><li>Keep the <b>repo</b> box checked, then create the token.</li><li>Copy it and paste it here.</li></ol>`;
         box.innerHTML = frame('One quick authorization',
-          `<div style="font-size:12px;line-height:1.6;color:var(--text-2)">To <b>save</b> these settings, GitHub needs a one-time token (used once, never stored). It's separate from your email — your saved login can read your files but can't store settings.</div>
-           <ol style="margin:9px 0 9px 17px;padding:0;font-size:12px;line-height:1.65;color:var(--text-2)"><li>Click <b>Generate token</b> below.</li><li>Keep the <b>repo</b> box checked, then create the token.</li><li>Copy it and paste it here.</li></ol>
+          `${oneClick}
            <a href="${TOKEN_URL}" target="_blank" rel="noopener" class="btn" style="padding:5px 11px;font-size:11.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:10px"><i class="ti ti-external-link"></i>Generate token</a>
            <input id="ce-ghtoken" type="password" value="${escapeHtml(S.ghtoken)}" placeholder="paste the GitHub token here" style="${inputCss}">`,
           backBtn + nextBtn + cancelBtn);
         $('ce-ghtoken').oninput = e => S.ghtoken = e.target.value;
         $('ce-next').onclick = () => { if (!S.ghtoken.trim()){ $('ce-stat').textContent = 'Paste the token (click Generate token first).'; return; } S.step = 'test'; render(); };
+        const gc = $('ce-ghconnect');
+        if (gc) gc.onclick = async () => {
+          const stat = $('ce-stat');
+          try {
+            stat.textContent = 'Contacting GitHub…';
+            const d = await startDeviceLogin();
+            $('ce-ghcode').innerHTML = `Enter this code at GitHub: <b style="font-size:15px;letter-spacing:2px">${escapeHtml(d.user_code)}</b> <button id="ce-ghopen" class="btn" style="padding:3px 9px;font-size:11px">Open GitHub</button>`;
+            const open = () => window.open(d.verification_uri, '_blank', 'noopener');
+            $('ce-ghopen').onclick = open; open();
+            stat.textContent = 'Waiting for you to authorize on GitHub…';
+            const token = await pollForToken(d.device_code, d.interval, s => {
+              if (s.state === 'slow') stat.textContent = 'Waiting… (GitHub asked us to slow down)';
+            });
+            localStorage.setItem('ghpat', token); localStorage.setItem('ghauth', 'app');
+            stat.textContent = 'Connected — checking access…';
+            const pk = await checkAccess(token).catch(() => null);
+            if (pk){ S.needToken = false; S.savedPk = pk; S.step = 'test'; render(); }
+            else stat.innerHTML = 'Connected, but the app can\'t reach your data repo yet — make sure the GitHub App is <b>installed on your data repo</b>, then try again.';
+          } catch(e){ stat.textContent = 'GitHub connect failed: ' + e.message + ' — you can paste a token instead.'; }
+        };
         wireCommon();
         return;
       }
