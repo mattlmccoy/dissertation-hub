@@ -1905,7 +1905,7 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
   // to it, so re-rendering a step never loses what was typed.
   const openConnectForm = () => {
     const box = document.getElementById('adv-email-banner'); if (!box) return;
-    const S = { step:'provider', provider:'', user:'', pass:'', host:'', port:'', name:'', testTo:'', ghtoken:'',
+    const S = { step:'provider', provider:'', user:'', from:'', pass:'', host:'', port:'', name:'', testTo:'', ghtoken:'',
                 needToken:false, savedPk:null };
     const $ = id => document.getElementById(id);
     const seq = () => ['provider', 'key', ...(S.needToken ? ['token'] : []), 'test'];
@@ -1959,18 +1959,27 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
             <label style="font-size:12px">SMTP host<input id="ce-host" value="${escapeHtml(S.host)}" placeholder="smtp.yourprovider.com" style="${inputCss}"></label>
             <label style="font-size:12px">Port<input id="ce-port" value="${escapeHtml(S.port || '587')}" style="${inputCss}"></label>
           </div>` : '';
+        // Brevo's SMTP login differs from the From address, so show two fields; others use one.
+        const loginBlock = P.separateLogin ? `
+           <label style="font-size:12px">SMTP login (username)<div style="font-size:11px;color:var(--text-3);font-weight:400;margin:2px 0 3px">${escapeHtml(P.loginHint || '')}</div>
+             <input id="ce-user" value="${escapeHtml(S.user)}" placeholder="12345@smtp-brevo.com" style="${inputCss};margin-bottom:9px"></label>
+           <label style="font-size:12px">From address advisors will see<div style="font-size:11px;color:var(--text-3);font-weight:400;margin:2px 0 3px">Your real, verified sender email (add it under Senders in Brevo).</div>
+             <input id="ce-from" type="email" value="${escapeHtml(S.from)}" placeholder="you@university.edu" style="${inputCss};margin-bottom:9px"></label>`
+          : `<label style="font-size:12px">Sending email address<input id="ce-user" type="email" value="${escapeHtml(S.user)}" placeholder="you@example.com" style="${inputCss};margin-bottom:9px"></label>`;
         box.innerHTML = frame(`Get your ${escapeHtml(P.secretWord)}`,
           `<div style="font-size:12px;color:var(--text-2);margin-bottom:6px">This is a special key you generate — <b>not</b> your normal email login password.</div>
            <ol style="margin:0 0 9px 17px;padding:0;font-size:12px;line-height:1.65;color:var(--text-2)">${howto}</ol>${link}
-           <label style="font-size:12px">Sending email address<input id="ce-user" type="email" value="${escapeHtml(S.user)}" placeholder="you@example.com" style="${inputCss};margin-bottom:9px"></label>
+           ${loginBlock}
            ${customHostPort}
            <label style="font-size:12px">Paste your ${escapeHtml(P.secretWord)}<input id="ce-pass" type="password" value="${escapeHtml(S.pass)}" placeholder="the ${escapeHtml(P.secretWord)} from the step above" style="${inputCss}"></label>`,
           backBtn + nextBtn + cancelBtn);
         $('ce-user').oninput = e => S.user = e.target.value;
         $('ce-pass').oninput = e => S.pass = e.target.value;
+        if (P.separateLogin){ $('ce-from').oninput = e => S.from = e.target.value; }
         if (S.provider === 'custom'){ $('ce-host').oninput = e => S.host = e.target.value; $('ce-port').oninput = e => S.port = e.target.value; }
         $('ce-next').onclick = async () => {
-          if (!S.user.trim() || !S.pass){ $('ce-stat').textContent = `Enter your sending address and your ${P.secretWord}.`; return; }
+          if (!S.user.trim() || !S.pass){ $('ce-stat').textContent = `Enter your SMTP login and your ${P.secretWord}.`; return; }
+          if (P.separateLogin && !S.from.trim()){ $('ce-stat').textContent = 'Enter the From address advisors will see (your verified sender).'; return; }
           if (S.provider === 'custom' && (!S.host.trim() || !(S.port || '').trim())){ $('ce-stat').textContent = 'Enter your SMTP host and port.'; return; }
           $('ce-stat').textContent = 'Checking…'; await S.probe;
           S.step = S.needToken ? 'token' : 'test'; render();
@@ -2071,6 +2080,7 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
       await putSecret(etok, pk, sealToBase64, 'SMTP_HOST', host);
       await putSecret(etok, pk, sealToBase64, 'SMTP_PORT', port);
       await putSecret(etok, pk, sealToBase64, 'ADVISOR_KEY', key);
+      await putSecret(etok, pk, sealToBase64, 'SMTP_FROM', (S.from || user).trim());   // sender ≠ login for Brevo
       if (name) await putSecret(etok, pk, sealToBase64, 'SMTP_FROM_NAME', name);
       if (name) await setVariable(etok, 'AUTHOR_NAME', name);
       await setVariable(etok, 'PORTAL_BASE', portalBase());
