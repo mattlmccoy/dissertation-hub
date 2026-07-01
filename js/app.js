@@ -1840,7 +1840,14 @@ async function openReleasePanel(){
   const emailConfigured = () => advReg.email_configured === true;
   const renderEmailBanner = () => {
     const box = document.getElementById('adv-email-banner'); if (!box) return;
-    if (emailConfigured()){ box.innerHTML = ''; return; }
+    if (emailConfigured()){
+      // Keep a way back in — the owner can switch providers or re-test at any time.
+      box.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-3);border:.5px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px">
+        <i class="ti ti-circle-check" style="color:var(--success)"></i> Email invites are set up.
+        <button id="adv-email-change" class="btn" style="padding:3px 10px;font-size:11px;margin-left:auto">Change email / re-test</button></div>`;
+      const cb = document.getElementById('adv-email-change'); if (cb) cb.onclick = openConnectForm;
+      return;
+    }
     const dataRepo = 'mattlmccoy/dissertation-tracker-data';   // where the invite workflow + secrets live
     box.innerHTML = `
       <div style="border:.5px solid var(--warn);background:var(--warn-bg);border-radius:9px;padding:11px 13px;margin-bottom:12px">
