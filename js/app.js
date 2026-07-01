@@ -1933,12 +1933,16 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
     const applyProv = pid => { const p = PROVIDERS[pid]; if (!p) return;
       $('ce-host').value = p.host; $('ce-port').value = p.port;
       const co = $('ce-keycallout');
+      // For app-password providers (Gmail/Outlook), offer the one-key Brevo path as an easier escape hatch.
+      const brevoNudge = (!p.recommended && p.keyUrl) ? `<div style="margin-top:6px;color:var(--text-3)">No app password, or it's blocked? <a href="#" id="ce-usebrevo" style="font-weight:600">Use Brevo instead</a> — one key, no 2-Step.</div>` : '';
       if (p.keyUrl){
         co.innerHTML = `<div style="border:.5px solid var(--warn);background:var(--warn-bg);border-radius:7px;padding:9px 10px;font-size:11.5px;line-height:1.5">
           <b>${escapeHtml(p.label)} needs a special ${escapeHtml(p.secretWord)}</b> — this is <b>not</b> your normal login password.
           <div style="margin-top:5px"><a href="${p.keyUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;font-weight:600"><i class="ti ti-external-link"></i>${escapeHtml(p.keyLabel)}</a></div>
-          ${p.keyNote ? `<div style="color:var(--text-3);margin-top:4px">${escapeHtml(p.keyNote)}</div>` : ''}</div>`;
+          ${p.keyNote ? `<div style="color:var(--text-3);margin-top:4px">${escapeHtml(p.keyNote)}</div>` : ''}${brevoNudge}</div>`;
       } else co.innerHTML = p.keyNote ? `<div style="font-size:11px;color:var(--text-3)">${escapeHtml(p.keyNote)}</div>` : '';
+      const ub = $('ce-usebrevo');
+      if (ub) ub.onclick = e => { e.preventDefault(); provTouched = true; $('ce-prov').value = 'brevo'; applyProv('brevo'); };
     };
     // Re-detect on EVERY keystroke (a half-typed domain briefly reads as 'custom'); the finished
     // address wins — unless the owner has manually chosen a provider.

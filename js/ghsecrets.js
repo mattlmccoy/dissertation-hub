@@ -8,15 +8,15 @@ const hdr = tok => ({ Authorization:`Bearer ${tok}`, Accept:'application/vnd.git
 // EXACT page where the owner generates the app password / API key that goes in the password field —
 // which is never their normal account login password.
 export const PROVIDERS = {
+  brevo:    { id:'brevo',    label:'Brevo — recommended (one key, no 2-Step)', host:'smtp-relay.brevo.com', port:587, domains:[], recommended:true,
+              secretWord:'SMTP key', keyUrl:'https://app.brevo.com/settings/keys/smtp', keyLabel:'Create a free Brevo account & get your SMTP key',
+              keyNote:'Easiest, most reliable: free, no 2-Step and no app-password pitfalls. Sign up, open SMTP & API → SMTP, copy the SMTP key, and paste it here. Your Brevo login email is the sending address.' },
   gmail:    { id:'gmail',    label:'Gmail',                host:'smtp.gmail.com',     port:465, domains:['gmail.com','googlemail.com'],
               secretWord:'App Password', keyUrl:'https://myaccount.google.com/apppasswords', keyLabel:'Create your Gmail App Password',
               keyNote:'Requires 2-Step Verification to be on. Paste the 16-character code (spaces optional).' },
   outlook:  { id:'outlook',  label:'Outlook / Office 365', host:'smtp.office365.com', port:587, domains:['outlook.com','hotmail.com','live.com'],
               secretWord:'app password', keyUrl:'https://account.live.com/proofs/AppPassword', keyLabel:'Create an Outlook app password',
               keyNote:'For personal Outlook/Hotmail. Work/school (Office 365) accounts set app passwords via your IT security portal.' },
-  brevo:    { id:'brevo',    label:'Brevo (Sendinblue)',   host:'smtp-relay.brevo.com', port:587, domains:[],
-              secretWord:'SMTP key', keyUrl:'https://app.brevo.com/settings/keys/smtp', keyLabel:'Get your Brevo SMTP key',
-              keyNote:'Use the SMTP key, not the account password.' },
   custom:   { id:'custom',   label:'Custom SMTP',          host:'', port:587, domains:[],
               secretWord:'app password / API key', keyUrl:'', keyLabel:'', keyNote:"Use your provider's app password or API key, not your login." },
 };
