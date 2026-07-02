@@ -49,13 +49,21 @@ function loadDemoChapterOwner(){
   if (!CHAPTERS.some(c => c.id === current)) current = CHAPTERS[0].id;   // valid chapter name for the topbar
   document.getElementById('nav').style.display = ''; document.getElementById('comments').style.display = '';
   renderTopbar();   // chapter topbar so #btn-send / #btn-more exist for the tour
+  // Same rich sample canvas the advisor tour uses (real-looking figure + table + prose) so the
+  // walkthrough points at content that looks like a real chapter, not three bare sentences.
+  const fig = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="520" height="200"><rect width="520" height="200" fill="#e9e7e1"/><text x="260" y="106" font-family="sans-serif" font-size="16" fill="#8f8d84" text-anchor="middle">Sample figure</text></svg>');
   rd.innerHTML = `<article id="doc">
-      <h1>Chapter 3 · Sample (tour preview)</h1>
-      <p>This preview chapter shows how reviewing works. Nothing here is saved.</p>
-      <p>Radio-frequency heating delivers energy through a dielectric. The reviewer flagged the sample phrasing here, and a proposed edit is staged for it.</p>
-      <p>Select any text here to leave your own note or propose exact replacement wording.</p></article>`;
+      <h1>Sample chapter (tour preview)</h1>
+      <p id="tour-demo-select">This preview chapter shows how reviewing works. Nothing here is saved.</p>
+      <p>Radio-frequency heating delivers energy through a dielectric medium. The reviewer flagged the sample phrasing here, and a proposed edit is staged for it.</p>
+      <figure><img alt="Sample figure" src="${fig}"><figcaption>Figure 3.1. A sample figure. Click it to comment on the figure itself.</figcaption></figure>
+      <p>Select any text here to leave your own note, or propose exact replacement wording.</p>
+      <table><caption>Table 3.1. Sample results.</caption><thead><tr><th>Case</th><th>Value</th></tr></thead>
+        <tbody><tr><td>Baseline</td><td>12.4</td></tr><tr><td>Compensated</td><td>4.1</td></tr></tbody></table>
+      <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam.</p></article>`;
   const doc = document.getElementById('doc');
   previewing = false;
+  try { wireFigures(doc); } catch {}   // make the sample figure + table clickable, exactly like a real chapter
   // one real advisor comment -> rendered by the real buildAdvCard (real Jump/Reply/Note/Suggest/Resolution/Send actions)
   advisorComments = [{ id:'demo-adv', _advisor:'demo', read:false, kind:'text', tag:'wording', status:'submitted',
     anchor:{ quote:'Radio-frequency heating delivers energy' }, body:'Consider defining this for a general reader.', created_ts:new Date().toISOString() }];
@@ -75,7 +83,9 @@ const OWNER_CHAPTER_TOUR = [
   { sel:'.ccard.adv .a-send', title:'Or hand it to Claude', body:'Once you have read a comment, send it to Claude to draft the edit. You still approve the result before anything lands.' },
   { sel:'#doc ins.tc-stage', title:'Proposed edits show inline', body:'A staged edit shows as tracked changes right in the text, the old wording struck through and the new wording in place.' },
   { sel:'#approvebar', title:'Approve and merge', body:'The bar tallies what is approved, rejected, or still to decide. Preview the rendered result, then Queue the approved edits for merge.' },
-  { sel:'#doc p', title:'Comment yourself too', body:'Select any text to leave your own note or propose exact replacement wording, the same way your advisors do.' },
+  { sel:'#tour-demo-select', title:'Comment yourself too', body:'Select any text to leave your own note or propose exact replacement wording, the same way your advisors do.', pin:'bl' },
+  { sel:'#doc figure', title:'Comment on a figure', body:'Click a figure to comment on it, and you can draw a box or circle to point at the exact spot.', pin:'bl' },
+  { sel:'#doc table', title:'Everything is reviewable', body:'Tables and equations take comments too, not just paragraphs. Your advisors can weigh in on all of them the same way.' },
   { sel:'#btn-more', title:'That is the loop', body:'Read, resolve, approve, merge. Reopen this walkthrough anytime from the More menu.' },
 ];
 function launchOwnerChapterTour(){ const restore = loadDemoChapterOwner(); startTour(OWNER_CHAPTER_TOUR, { storageKey:'tour-owner-chapter-v1', onDone: restore }); }
