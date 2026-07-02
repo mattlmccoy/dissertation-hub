@@ -180,6 +180,19 @@ async function syncDown(){ const t = tok(); if (!t) return;
       (json.comments||[]).forEach(rc => { if (!deleted.has(rc.id) && !review.comments.find(c=>c.id===rc.id)) review.comments.push(rc); });
       save(); renderComments(); if (document.getElementById('doc')) paintHighlights(); } }
   catch(e){ /* first time / offline */ } }
+// Live polling: re-pull the author's replies/resolutions on a cadence + when the tab refocuses.
+// Guard: skip the poll while the reviewer is mid-write (a comment popover is open, or a textarea in the
+// comment area has focus) so a re-render never yanks their cursor. Data is already merge-safe in syncDown.
+let livePollTimer = null;
+function isAdvisorBusy(){
+  if (typeof pending !== 'undefined' && pending) return true;
+  const a = document.activeElement;
+  return !!(a && a.tagName === 'TEXTAREA');
+}
+function livePoll(){ if (!tok() || document.hidden || isAdvisorBusy()) return; syncDown(); }
+function startLiveSync(){ stopLiveSync(); livePollTimer = setInterval(livePoll, 20000); }
+function stopLiveSync(){ if (livePollTimer){ clearInterval(livePollTimer); livePollTimer = null; } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) livePoll(); });
 // a local mutation isn't safe until confirmed on GitHub — flag it, persist, and schedule a push
 // the "unsaved" banner is driven purely by sync OUTCOME — syncUp clears it on a confirmed PUT
 // and raises it on a real failure, and the 30s heartbeat surfaces genuinely-stuck chapters.
@@ -270,7 +283,7 @@ function renderDoc(fragment){
   const doc = document.getElementById('doc');
   fixFootnotes(doc); runKatex(doc); wireFigures(doc); wireCitations(doc); linkCrossRefs(doc); buildNav(); markWhatsNew(doc); paintHighlights();
   if (review.cursor?.sec) document.getElementById(review.cursor.sec)?.scrollIntoView();
-  syncDown();
+  syncDown(); startLiveSync();
   if (pendingJump){ const q=pendingJump; pendingJump=null; let tries=14;
     const tick=()=>{ const el=(document.getElementById('doc')?locateAnchor({anchor:{quote:q}}):null);
       if(el){ scrollFlash(el); return; } if(tries-->0) setTimeout(tick,280); };
@@ -756,6 +769,7 @@ function openChapterMenu(){ const old=document.getElementById('chmenu'); if(old)
   setTimeout(()=>document.addEventListener('click',function h(e){ if(!menu.contains(e.target)&&e.target.id!=='chsel'){ menu.remove(); document.removeEventListener('click',h); } }),0);
 }
 function enterHome(){
+  stopLiveSync();
   document.getElementById('nav').style.display='none'; document.getElementById('comments').style.display='none';
   document.getElementById('topbar').innerHTML=`<strong style="font-size:16px;font-weight:600">Dissertation review · ${escapeHtml(ADVISOR.name)}</strong>
      <button class="icbtn" id="btn-theme" style="margin-left:auto"><i class="ti ti-moon"></i></button>
