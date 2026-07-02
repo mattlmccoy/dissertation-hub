@@ -2096,8 +2096,9 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
     const cbtn = document.getElementById('adv-email-connect');
     if (cbtn) cbtn.onclick = openConnectForm;
   };
-  // Direct "send a test email" — a fast path that reuses the invite workflow without walking the
-  // full connect wizard. Still needs a workflow-scoped token (Actions:write) to dispatch.
+  // Direct "send a test email" — writes email_test_request.json to the data repo using the owner's
+  // already-stored token (Contents:write). That push triggers the invite workflow, which sends the
+  // test and deletes the request file. No workflow-scoped token needed.
   function openTestSend(){
     const box = document.getElementById('adv-email-banner'); if (!box) return;
     box.innerHTML = `
@@ -2105,36 +2106,36 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
         <div style="font-weight:600;font-size:13px;margin-bottom:8px"><i class="ti ti-send" style="margin-right:5px"></i>Send a test email</div>
         <div style="display:grid;gap:8px">
           <input id="ts-to" type="email" placeholder="Recipient email" style="${inputCss}">
-          <input id="ts-tok" type="password" placeholder="GitHub token with workflow scope" style="${inputCss}">
-          <div style="font-size:11px;color:var(--text-3);line-height:1.5">Need one? <a href="${TOKEN_URL}" target="_blank" rel="noopener">Generate a token</a> (repo + workflow) and paste it. It is used once and not stored.</div>
           <div style="display:flex;gap:8px;align-items:center">
             <button id="ts-send" class="btn btn-primary" style="padding:5px 13px;font-size:12px">Send test</button>
             <button id="ts-cancel" class="btn" style="padding:5px 11px;font-size:12px">Cancel</button>
             <span id="ts-stat" style="font-size:11.5px;color:var(--text-3)"></span>
           </div>
+          <div style="font-size:11px;color:var(--text-3)">Uses your saved access — no extra token needed.</div>
         </div>
       </div>`;
     document.getElementById('ts-cancel').onclick = renderEmailBanner;
     document.getElementById('ts-send').onclick = async () => {
       const to = (document.getElementById('ts-to').value || '').trim();
-      const etok = (document.getElementById('ts-tok').value || '').trim();
       const stat = document.getElementById('ts-stat');
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)){ stat.textContent = 'Enter a valid recipient email.'; return; }
-      if (!etok){ stat.textContent = 'Paste a workflow-scoped token.'; return; }
+      const sendBtn = document.getElementById('ts-send'); sendBtn.disabled = true;
       try {
-        stat.textContent = 'Checking token…';
-        const pk = await checkAccess(etok);
-        if (!pk){ stat.innerHTML = 'That token is missing <b>Actions</b> (workflow) access — regenerate it with the <b>repo</b> and <b>workflow</b> scopes.'; return; }
-        stat.textContent = 'Dispatching test…';
-        const before = (await latestRun(etok))?.id || 0;
-        await dispatchInvite(etok, to);
-        const deadline = Date.now() + 90000; let run = null;
-        while (Date.now() < deadline){ await new Promise(r => setTimeout(r, 4000)); run = await latestRun(etok); if (run && run.id !== before && run.status === 'completed') break; }
-        if (!run || run.status !== 'completed'){ stat.textContent = 'Dispatched, but the run did not finish in time. Check back in a minute.'; return; }
-        const { json } = await getJson(tok(), 'advisors.json').catch(() => ({ json:null }));
-        if (run.conclusion === 'success' && json?.email_test?.ok){ flash('✅ Test email sent to ' + to); renderEmailBanner(); }
-        else { stat.innerHTML = 'Test failed: <code>' + escapeHtml(json?.email_test?.error || ('run: ' + run.conclusion)) + '</code>'; }
-      } catch(e){ stat.textContent = isScopeError(e) ? 'Token lacks Actions access — regenerate with repo + workflow.' : ('Failed: ' + e.message); }
+        stat.textContent = 'Requesting a test send…';
+        let beforeTs = '';
+        try { const { json } = await getJson(tok(), 'advisors.json'); beforeTs = json?.email_test?.ts || ''; } catch(e){}
+        await putJson(tok(), 'email_test_request.json', { to, ts: new Date().toISOString() }, undefined, 'email: request test send to ' + to);
+        stat.textContent = 'Sending… the mail workflow is running (up to ~1 min).';
+        const deadline = Date.now() + 120000; let et = null;
+        while (Date.now() < deadline){
+          await new Promise(r => setTimeout(r, 5000));
+          try { const { json } = await getJson(tok(), 'advisors.json'); const e = json?.email_test;
+            if (e && e.ts && e.ts !== beforeTs){ et = e; break; } } catch(err){}
+        }
+        if (et && et.ok){ flash('✅ Test email sent to ' + to); renderEmailBanner(); }
+        else if (et && !et.ok){ stat.innerHTML = 'Test failed: <code>' + escapeHtml(et.error || 'unknown') + '</code>'; sendBtn.disabled = false; }
+        else { stat.textContent = 'Requested, but no result yet — give it a minute and check your inbox / Spam.'; sendBtn.disabled = false; }
+      } catch(e){ stat.textContent = 'Failed: ' + e.message; sendBtn.disabled = false; }
     };
   }
   const inputCss = 'width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)';
