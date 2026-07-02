@@ -1,10 +1,10 @@
-import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=fe2bf34';
-import { anchorFromSelection } from './anchor.js?v=fe2bf34';
-import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=fe2bf34';
-import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub, isScopeError } from './ghsecrets.js?v=fe2bf34';
-import { sealToBase64 } from './vendor/seal.js?v=fe2bf34';
-import { isConfigured as ghAppConfigured, startDeviceLogin, pollForToken } from './ghauth.js?v=fe2bf34';
-import { startTour, tourSeen, markTourSeen } from './tour.js?v=fe2bf34';
+import { newReview, addComment, updateComment, deleteComment, setDecision, partitionByDecision, queueApproved } from './model.js?v=f6b7804';
+import { anchorFromSelection } from './anchor.js?v=f6b7804';
+import { reviewPath, mergeReview, getJson, putJson, ghTree, putFile, getDataUrl, deleteFile } from './gh.js?v=f6b7804';
+import { PROVIDERS, detectProvider, genKey, getPublicKey, putSecret, setVariable, dispatchInvite, latestRun, prefillFromGitHub, isScopeError } from './ghsecrets.js?v=f6b7804';
+import { sealToBase64 } from './vendor/seal.js?v=f6b7804';
+import { isConfigured as ghAppConfigured, startDeviceLogin, pollForToken } from './ghauth.js?v=f6b7804';
+import { startTour, tourSeen, markTourSeen } from './tour.js?v=f6b7804';
 
 // Guided owner tour — points only at elements that are reliably present on the home view, so nothing
 // is mis-highlighted. The engine skips any step whose element is absent.
