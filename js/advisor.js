@@ -44,7 +44,7 @@ const ADVISOR_TOUR = [
   { sel:'#doc figure', title:'Comment on a figure', body:'Click the sample figure to comment on it, and you can even draw a box or circle to point at the issue.', pin:'bl' },
   { sel:'#doc table', title:'Everything is reviewable', body:'Tables, equations, and figures can all be commented on, not just paragraphs.' },
   { sel:'#tour-demo-note', title:'Your notes', body:'Every note you leave collects here (this one is a sample). In a note you can also propose exact replacement wording for the author to accept in one click.' },
-  { sel:'#tour-demo-note', title:'Shared instantly', body:'Every comment is shared with the author the moment you add it — there is no submit step. You can edit or delete any comment afterward, and their replies appear here automatically.' },
+  { sel:'#tour-demo-note', title:'Shared instantly', body:'Every comment is shared with the author the moment you add it. There is no submit step, and you can edit or delete any comment afterward. Their replies appear here automatically.' },
   { sel:'#adv-tour-btn', title:'Replay anytime', body:'Reopen this tour whenever you like with the ? button.' },
 ];
 function launchAdvisorTour(){ const restore = loadDemoChapter(); startTour(ADVISOR_TOUR, { storageKey:'tour-advisor-v1', onDone: restore }); }
