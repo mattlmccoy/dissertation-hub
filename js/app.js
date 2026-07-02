@@ -39,52 +39,48 @@ function openTourMenu(){
   setTimeout(() => document.addEventListener('click', function h(e){ if (!m.contains(e.target) && e.target.id!=='btn-tour' && !e.target.closest?.('#btn-tour')){ m.remove(); document.removeEventListener('click', h); } }), 0);
 }
 function launchOwnerTour(){ startTour(OWNER_TOUR, { storageKey:'tour-owner-v1' }); }
-// A throwaway demo chapter that runs REAL sample data through the REAL render path (buildAdvCard,
-// renderStagedEdits, showApproveBar) so the walkthrough highlights the actual UI, not a mock-up.
-// Nothing is saved; teardown restores the globals and re-renders the real view.
+// The tour's demo chapter is a fully STATIC, dead mock — NOT the live tool. It borrows the real
+// builders (buildAdvCard / buildCommentCard) only to capture exact markup, then injects that as
+// inert HTML strings: none of the real .onclick wiring comes along, so Queue for merge, Resolution,
+// Send to Claude and Approve do nothing. `demoMode` silences the text-selection composer, and the
+// topbar Send button is unwired. Nothing here is live or saved; teardown just re-renders the real
+// view. This mirrors the advisor demo's static fake page instead of muzzling live components.
+let demoMode = false;
 function loadDemoChapterOwner(){
   const rd = document.getElementById('read'); if (!rd) return () => {};
+  const cmt = document.getElementById('comments');
   const prevReading = !!document.querySelector('#doc'), prevCurrent = current;
-  const savedReview = review, savedAdv = advisorComments, savedPrev = previewing;
   if (!CHAPTERS.some(c => c.id === current)) current = CHAPTERS[0].id;   // valid chapter name for the topbar
-  document.getElementById('nav').style.display = ''; document.getElementById('comments').style.display = '';
-  renderTopbar();   // chapter topbar so #btn-send / #btn-more exist for the tour
-  // Same rich sample canvas the advisor tour uses (real-looking figure + table + prose) so the
-  // walkthrough points at content that looks like a real chapter, not three bare sentences.
+  demoMode = true;
+  document.getElementById('nav').style.display = ''; cmt.style.display = '';
+  renderTopbar();   // chapter topbar so #btn-more exists for the tour to point at
+  const bs = document.getElementById('btn-send'); if (bs) bs.onclick = null;   // topbar Send to Claude: dead in the demo
   const fig = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="520" height="200"><rect width="520" height="200" fill="#e9e7e1"/><text x="260" y="106" font-family="sans-serif" font-size="16" fill="#8f8d84" text-anchor="middle">Sample figure</text></svg>');
-  rd.innerHTML = `<article id="doc">
+  // Sample data used ONLY to generate exact card markup — never written to the live globals.
+  const demoAdv = { id:'demo-adv', _advisor:'demo', read:false, kind:'text', tag:'wording', status:'submitted',
+    anchor:{ quote:'radio-frequency heating enables rapid, volumetric energy delivery' }, body:'Consider defining this for a general reader.', created_ts:new Date().toISOString() };
+  const demoSug = { id:'demo-sug', kind:'suggestion', tag:'wording', status:'staged', decision:'approve',
+    anchor:{ quote:'quis nostrud exercitation ullamco laboris' }, body:'Tighten this phrasing for a general reader.',
+    staged_edit:{ before:'quis nostrud exercitation ullamco laboris', after:'clearer, simpler wording' }, created_ts:new Date().toISOString() };
+  const advCard = buildAdvCard(demoAdv).outerHTML;      // exact markup; the .onclick wiring does not survive as a string
+  const sugCard = buildCommentCard(demoSug).outerHTML;
+  // Static reading view: the advisor tour's lorem page, with the advisor comment highlighted and one
+  // staged edit shown inline as tracked changes. All baked in; none of it is live.
+  rd.innerHTML = `<div id="approvebar" class="approvebar"><i class="ti ti-git-pull-request"></i><span><b>1</b> staged change — <b>1</b> approved · 0 rejected · 0 to decide. shown inline as <span class="tc-legend"><del>old</del> <ins>new</ins></span>.</span><button class="btn" id="preview-btn" style="margin-left:auto"><i class="ti ti-eye"></i>Preview rendered</button><button class="btn btn-primary" id="merge-approved">Queue 1 for merge</button></div>
+    <article id="doc">
       <h1>Sample chapter (tour preview)</h1>
-      <p id="tour-demo-select">This preview chapter shows how reviewing works. Lorem ipsum dolor sit amet, consectetur adipiscing elit; radio-frequency heating enables rapid, volumetric energy delivery through a dielectric medium. Select any words here to attach a comment.</p>
-      <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi.</p>
+      <p id="tour-demo-select">This preview chapter shows how reviewing works. Lorem ipsum dolor sit amet, consectetur adipiscing elit; <mark class="cmark" data-aid="demo-adv">radio-frequency heating enables rapid, volumetric energy delivery</mark> through a dielectric medium. Select any words here to attach a comment.</p>
+      <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Ut enim ad minim veniam, <del class="tc-stage">quis nostrud exercitation ullamco laboris</del><ins class="tc-stage"> clearer, simpler wording</ins> nisi.</p>
       <figure><img alt="Sample figure" src="${fig}"><figcaption>Figure 3.1. A sample figure. Click it to comment on the figure itself.</figcaption></figure>
       <p>Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
       <table><caption>Table 3.1. Sample results.</caption><thead><tr><th>Case</th><th>Value</th></tr></thead>
         <tbody><tr><td>Baseline</td><td>12.4</td></tr><tr><td>Compensated</td><td>4.1</td></tr></tbody></table>
       <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam.</p></article>`;
-  const doc = document.getElementById('doc');
-  previewing = false;
-  try { wireFigures(doc); } catch {}   // make the sample figure + table clickable, exactly like a real chapter
-  // one real advisor comment -> rendered by the real buildAdvCard (real Jump/Reply/Note/Suggest/Resolution/Send actions)
-  advisorComments = [{ id:'demo-adv', _advisor:'demo', read:false, kind:'text', tag:'wording', status:'submitted',
-    anchor:{ quote:'radio-frequency heating enables rapid, volumetric energy delivery' }, body:'Consider defining this for a general reader.', created_ts:new Date().toISOString() }];
-  // one real staged edit -> painted inline by renderStagedEdits + tallied by the real approve bar
-  review = newReview('__demo__', 'demo');
-  review = addComment(review, { kind:'suggestion', tag:'wording', anchor:{ quote:'' }, body:'Tighten this phrasing for a general reader.' });
-  const sc = review.comments[0]; sc.status = 'staged'; sc.decision = 'approve'; sc.staged_edit = { before:'quis nostrud exercitation ullamco laboris', after:'clearer, simpler wording' };
-  renderComments(); paintHighlights(); renderStagedEdits(doc); showApproveBar();
-  // This is a dead preview, not the live tool: swallow clicks on every actionable control in the
-  // sample surfaces so nothing (Queue for merge, Resolution, Send to Claude, a comment save) ever
-  // runs or writes. The tour's own controls live in .tour-overlay, so they still work. Mirrors the
-  // way the advisor demo's Submit button is inert.
-  const demoGuard = e => {
-    if (e.target.closest('.tour-overlay')) return;                                       // let Next/Back/Skip through
-    if (e.target.closest('#btn-send')){ e.preventDefault(); e.stopPropagation(); return; } // topbar Send to Claude: no real send in the demo
-    if (!e.target.closest('#approvebar, #comments, #read, .popover, .figmk-back')) return;
-    if (e.target.closest('button, .btn, [data-act], .aj, a, input, select')){ e.preventDefault(); e.stopPropagation(); }
-  };
-  document.addEventListener('click', demoGuard, true);
-  return () => { document.removeEventListener('click', demoGuard, true);
-    review = savedReview; advisorComments = savedAdv; previewing = savedPrev;
+  cmt.innerHTML = `<div class="lbl">COMMENTS<span style="margin-left:auto">1 · 0 open</span></div>
+    ${sugCard}
+    <div class="lbl adv-lbl"><i class="ti ti-users" style="margin-right:5px"></i>FROM ADVISORS<span style="margin-left:auto">1</span></div>
+    ${advCard}`;
+  return () => { demoMode = false;   // nothing live was touched — just re-render the real view
     if (prevReading && CHAPTERS.some(c => c.id === prevCurrent)){ current = prevCurrent; enterChapter(prevCurrent); }
     else { current = prevCurrent; enterHome(); } };
 }
@@ -639,6 +635,7 @@ function headingFor(node){
   return '';
 }
 function showPopover(anchor, rects, defaultTag='claim', figEl=null){
+  if (demoMode) return;   // the tour's demo chapter is a dead preview: never open the live composer
   document.getElementById('pop')?.remove();
   const top = Math.max(...rects.map(r => r.y + r.h)) + 10;
   const isFig = anchor.kind === 'figure';
