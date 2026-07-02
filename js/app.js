@@ -246,6 +246,7 @@ function renderDoc(fragment){
   restoreCursor();
   syncDown();
   loadAdvisorComments(current);
+  startOwnerLiveSync();
   if (!previewing) loadSrcmapPencils(current);
 }
 // ---------- in-context direct editor (prose -> confirm LaTeX diff -> stage) ----------
@@ -364,6 +365,27 @@ async function loadAdvisorComments(ch){
   if (!dev){ const t = tok(); if (t){ try { advNotesState = await loadAdvisorNotes(t); } catch(e){ advNotesState = { notes:{}, sha:null }; } } }
   if (current === ch){ renderComments(); paintHighlights(); }
 }
+// Live polling for the owner: refresh advisor comments on a cadence + on tab refocus, without
+// disrupting the author. Guard: skip while a textarea in the comment/reply area has focus, and
+// preserve the comment-rail scroll across a refresh. New comment cards get a one-shot flash.
+let ownerPollTimer = null;
+function ownerBusy(){ const a = document.activeElement; return !!(a && (a.tagName === 'TEXTAREA' || a.isContentEditable)); }
+function seenCommentIds(){ return new Set([...document.querySelectorAll('[data-cid]')].map(e => e.dataset.cid)); }
+async function ownerLivePoll(){
+  // Only auto-refresh the reading view's comment rail (the "I had to reload to see comments" pain).
+  // The release panel is NOT auto-rebuilt — its full re-render would collapse expanded groups and
+  // clobber the notify-email field mid-edit; that stays manual (deferred follow-up).
+  if (document.hidden || ownerBusy() || !tok()) return;
+  if (typeof current === 'undefined' || !current) return;   // not in a chapter → nothing to poll
+  const rail = document.querySelector('#comments, .comment-rail'); const top = rail ? rail.scrollTop : 0;
+  const before = seenCommentIds();
+  try { await loadAdvisorComments(current); } catch(e){ return; }
+  const railNow = document.querySelector('#comments, .comment-rail'); if (railNow) railNow.scrollTop = top;
+  document.querySelectorAll('[data-cid]').forEach(el => { if (!before.has(el.dataset.cid)){ el.classList.add('cmt-new'); setTimeout(() => el.classList.remove('cmt-new'), 2200); } });
+}
+function startOwnerLiveSync(){ stopOwnerLiveSync(); ownerPollTimer = setInterval(ownerLivePoll, 20000); }
+function stopOwnerLiveSync(){ if (ownerPollTimer){ clearInterval(ownerPollTimer); ownerPollTimer = null; } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ownerLivePoll(); });
 let advNotesState = { notes:{}, sha:null };   // owner-private notes, shared by the rail + panel
 // ---------- clickable cross-references (Figure / Table / Section / Chapter N.M) ----------
 const chapterByNum = n => CHAPTERS.find(c => c.n === n);
@@ -1444,6 +1466,7 @@ function chapterStats(ch){
            checked, sec, frac: sec ? checked/sec : 0, readDone: sec>0 && checked>=sec };
 }
 function enterHome(){
+  stopOwnerLiveSync();
   document.getElementById('nav').style.display = 'none';
   document.getElementById('comments').style.display = 'none';
   document.getElementById('topbar').innerHTML =
@@ -1839,6 +1862,7 @@ function manageToken(){
 // ---------- release gate: control which chapters each advisor's portal shows ----------
 async function openReleasePanel(){
   const t = tok(); if (!t){ flash('Add your access token first.'); return; }
+  stopOwnerLiveSync();
   document.getElementById('nav').style.display = 'none';
   document.getElementById('comments').style.display = 'none';
   document.getElementById('topbar').innerHTML =
