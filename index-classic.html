@@ -200,7 +200,7 @@
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <div class="kicker">RFAM · Georgia Tech ME</div>
+      <div class="kicker">Dissertation review</div>
       <h1>Dissertation <em>Dashboard</em></h1>
     </div>
     <div class="countdown">
@@ -613,7 +613,7 @@ $("#syncBtn").onclick=async()=>{DIRTY?await ghPush():await ghPull()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeEditor();$("#setScrim").classList.remove("on");$("#wirScrim").classList.remove("on");$("#specScrim").classList.remove("on")}if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();if(DIRTY)ghPush()}if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();$("#undoBtn").click()}});
 
 /* ===================== boot ===================== */
-const SEED={meta:{title:"RFAM Dissertation Tracker",defenseDate:"2026-10-15",phases:["DoE & Validation","Papers","Novelty","Lab & Experiments","Dissertation","Future Work"]},tasks:[]};
+const SEED={meta:{title:"Dissertation Tracker",defenseDate:"2026-10-15",phases:["DoE & Validation","Papers","Novelty","Lab & Experiments","Dissertation","Future Work"]},tasks:[]};
 buildSwatches();applyTheme();
 (function boot(){
   const c=localStorage.getItem(LS.cache);DB=c?JSON.parse(c):JSON.parse(JSON.stringify(SEED));

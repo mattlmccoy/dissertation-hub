@@ -2047,7 +2047,7 @@ gh variable set PORTAL_BASE --repo ${dataRepo}</pre>
   const inputCss = 'width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)';
   // ---- Connect email: write SMTP secrets to the data repo + real test send (owner-only) ----
   // TOKEN_URL: pre-scoped classic token so the owner just clicks Generate (repo→secrets, workflow→dispatch).
-  const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=RFAM%20email%20setup';
+  const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=Dissertation%20reviewer%20email%20setup';
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
   // The elevated token must do THREE things: write secrets (getPublicKey), and read+dispatch Actions
   // (latestRun proxies Actions access). Checking only secrets let a Secrets-but-not-Actions token
