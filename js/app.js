@@ -370,7 +370,7 @@ async function loadAdvisorComments(ch){
 // preserve the comment-rail scroll across a refresh. New comment cards get a one-shot flash.
 let ownerPollTimer = null;
 function ownerBusy(){ const a = document.activeElement; return !!(a && (a.tagName === 'TEXTAREA' || a.isContentEditable)); }
-function seenCommentIds(){ return new Set([...document.querySelectorAll('[data-cid]')].map(e => e.dataset.cid)); }
+function seenCommentIds(){ return new Set([...document.querySelectorAll('#comments [data-aid]')].map(e => e.dataset.aid)); }
 async function ownerLivePoll(){
   // Only auto-refresh the reading view's comment rail (the "I had to reload to see comments" pain).
   // The release panel is NOT auto-rebuilt — its full re-render would collapse expanded groups and
@@ -381,7 +381,7 @@ async function ownerLivePoll(){
   const before = seenCommentIds();
   try { await loadAdvisorComments(current); } catch(e){ return; }
   const railNow = document.querySelector('#comments, .comment-rail'); if (railNow) railNow.scrollTop = top;
-  document.querySelectorAll('[data-cid]').forEach(el => { if (!before.has(el.dataset.cid)){ el.classList.add('cmt-new'); setTimeout(() => el.classList.remove('cmt-new'), 2200); } });
+  document.querySelectorAll('#comments [data-aid]').forEach(el => { if (!before.has(el.dataset.aid)){ el.classList.add('cmt-new'); setTimeout(() => el.classList.remove('cmt-new'), 2200); } });
 }
 function startOwnerLiveSync(){ stopOwnerLiveSync(); ownerPollTimer = setInterval(ownerLivePoll, 20000); }
 function stopOwnerLiveSync(){ if (ownerPollTimer){ clearInterval(ownerPollTimer); ownerPollTimer = null; } }
