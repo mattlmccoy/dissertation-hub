@@ -39,15 +39,22 @@ function loadDemoChapter(){
 // the demo is live so text-select and figure-click actually work, but nothing is sent or saved.
 const ADVISOR_TOUR = [
   { sel:'#nav', title:'Released chapters', body:'The chapters the author shared with you. Click one to open it. (We loaded a sample chapter so you can see the rest of the tour.)' },
-  { sel:'#doc h1', title:'The reading view', body:'Chapters open on a clean, distraction-free page — read top to bottom.' },
-  { sel:'#tour-demo-select', title:'Comment on text', body:'Try selecting a few of these words — a box pops up where you type your note, pick a tag, and save. It attaches exactly there, private to the author.', pin:'bl' },
-  { sel:'#doc figure', title:'Comment on a figure', body:'Click the sample figure to comment on it specifically — you can even draw a box or circle to point at the issue.', pin:'bl' },
-  { sel:'#doc table', title:'Everything is reviewable', body:'Tables, equations, and figures can all be commented on — not just paragraphs.' },
+  { sel:'#doc h1', title:'The reading view', body:'Chapters open on a clean, distraction-free page. Read top to bottom.' },
+  { sel:'#tour-demo-select', title:'Comment on text', body:'Select a few of these words and a box pops up to type your note, pick a tag, and save. It attaches exactly there, private to the author.', pin:'bl' },
+  { sel:'#doc figure', title:'Comment on a figure', body:'Click the sample figure to comment on it, and you can even draw a box or circle to point at the issue.', pin:'bl' },
+  { sel:'#doc table', title:'Everything is reviewable', body:'Tables, equations, and figures can all be commented on, not just paragraphs.' },
   { sel:'#tour-demo-note', title:'Your notes', body:'Every note you leave collects here (this one is a sample). In a note you can also propose exact replacement wording for the author to accept in one click.' },
-  { sel:'#tour-demo-submit', title:'Submit when done', body:'Once you\'ve left your comments, Submit comments sends them all to the author. You can always come back and add more later.' },
+  { sel:'#tour-demo-submit', title:'Submit when done', body:'Submit comments sends them all to the author. Until you submit they stay private drafts, and you can always come back and add more later.' },
   { sel:'#adv-tour-btn', title:'Replay anytime', body:'Reopen this tour whenever you like with the ? button.' },
 ];
 function launchAdvisorTour(){ const restore = loadDemoChapter(); startTour(ADVISOR_TOUR, { storageKey:'tour-advisor-v1', onDone: restore }); }
+// Short walkthrough of commenting on the proposed outline (auto-launches once the first time the outline opens).
+const ADVISOR_OUTLINE_TOUR = [
+  { sel:'.ol-chapter', title:'The proposed structure', body:'This is the author\'s planned outline. Click a chapter to expand its sections and subsections.' },
+  { sel:'.ol-cmt', title:'Comment on any part', body:'Use the comment button on any chapter, section, or subsection to weigh in on the structure before the full chapters arrive.' },
+  { sel:'#btn-submit', title:'Submit when done', body:'Outline comments submit the same way as chapter comments.' },
+];
+function launchAdvisorOutlineTour(){ startTour(ADVISOR_OUTLINE_TOUR, { storageKey:'tour-advisor-outline-v1' }); }
 
 // --- comment model (self-contained) ---
 let _seq = 0; const nid = () => `c_${Date.now().toString(36)}_${(_seq++).toString(36)}`;
@@ -935,6 +942,7 @@ async function loadOutline(){
   }catch(e){}
   if(!data){ read.innerHTML=`<div class="empty">Couldn't load the outline. Check your access key.</div>`; return; }
   renderOutline(data); renderComments(); syncDown();
+  if (tok() && !tourSeen('tour-advisor-outline-v1')){ markTourSeen('tour-advisor-outline-v1'); setTimeout(() => { try { launchAdvisorOutlineTour(); } catch {} }, 900); }
 }
 function renderOutlineTopbar(){
   document.getElementById('topbar').innerHTML=`

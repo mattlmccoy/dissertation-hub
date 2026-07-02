@@ -9,13 +9,14 @@ import { startTour, tourSeen, markTourSeen } from './tour.js?v=d0c0563';
 // Guided owner tour — points only at elements that are reliably present on the home view, so nothing
 // is mis-highlighted. The engine skips any step whose element is absent.
 const OWNER_TOUR = [
-  { sel:'#btn-token', title:'Add your access token', body:'The reviewer reads your private data with a GitHub token, stored only in this browser. Click here to paste a fine-grained token (Contents: read/write on your data repo). Do this first.' },
-  { sel:'.chcard', title:'Your chapters', body:'Open any chapter to read it and address the comments your advisors leave in the side rail.' },
-  { sel:'#btn-releases', title:'Release to advisors', body:'Invite advisors, connect email so invites send automatically, and choose which chapters each advisor may review.' },
-  { sel:'#btn-export', title:'Responses to advisors', body:'Generate a printable page that shows each advisor how you addressed their comments. (This is a response summary — NOT an export of your document.)' },
-  { sel:'#dl-export-all', title:'Export with comments', body:'Download the whole dissertation (or any chapter\'s "..." → Export) as Word, PDF, or Markdown — with comments and tracked changes baked in.' },
-  { sel:'#btn-outline', title:'Proposed outline', body:'Share your planned structure so advisors can comment on it before chapters are released.' },
-  { sel:'#btn-tour', title:'Replay or turn off the tour', body:'Reopen this tour, or turn off auto-show for new users, from here anytime.' },
+  { sel:'#btn-token', title:'Add your access token', body:'The reviewer reads your private data with a GitHub token that stays only in this browser. Paste a fine-grained token with Contents read/write on your data repo here first.' },
+  { sel:'.chcard', title:'Your chapters', body:'Each card opens a chapter to read and to work through your advisors\' comments. The bar shows how far along you are.' },
+  { sel:'#inbox-panel', title:'Needs you', body:'Your triage center. Across every chapter it gathers comments waiting on you, edits staged to approve, and finished jobs. Click any count to jump straight there.' },
+  { sel:'#btn-releases', title:'Invite advisors and release chapters', body:'Add advisors, connect email so invites send on their own, and choose which chapters each advisor can see.' },
+  { sel:'#btn-outline', title:'Share your outline early', body:'Post your planned structure so advisors can comment on it before the full chapters are ready.' },
+  { sel:'#btn-export', title:'Show advisors how you responded', body:'Generate a printable summary of how you addressed each advisor\'s comments. This is a response summary, not a document export.' },
+  { sel:'#dl-export-all', title:'Export the document', body:'Download the whole dissertation, or any single chapter, as Word, PDF, or Markdown with comments and tracked changes included.' },
+  { sel:'#btn-tour', title:'Replay anytime', body:'Reopen this tour or turn auto-show off from here. Open any chapter, then use the More menu for the reviewing walkthrough.' },
 ];
 // Small menu on the home "?" button: replay the tour, or toggle auto-show for first-time users.
 function openTourMenu(){
@@ -25,17 +26,54 @@ function openTourMenu(){
   const m = document.createElement('div'); m.id = 'tourmenu';
   m.style.cssText = `position:absolute;top:${r.bottom+6}px;right:${Math.max(8, window.innerWidth-r.right)}px;z-index:46;background:var(--bg);border:.5px solid var(--border-2);border-radius:var(--r-md);box-shadow:0 10px 30px rgba(0,0,0,.16);padding:6px;min-width:230px`;
   const off = tourSeen('tour-owner-v1');
-  m.innerHTML = `<div class="mmi" data-a="run"><i class="ti ti-help-circle"></i>Take the tour</div>
+  m.innerHTML = `<div class="mmi" data-a="run"><i class="ti ti-help-circle"></i>Take the setup tour</div>
+    <div class="mmi" data-a="chapter"><i class="ti ti-book-2"></i>Reviewing a chapter (demo)</div>
     <div class="mmi" data-a="toggle"><i class="ti ti-${off?'eye-off':'eye-check'}"></i>Auto-show for new users: ${off?'off':'on'}</div>`;
   document.body.appendChild(m);
   m.querySelectorAll('.mmi').forEach(el => { el.onmouseenter = () => el.style.background='var(--bg-3)'; el.onmouseleave = () => el.style.background='transparent';
     el.onclick = () => { m.remove();
       if (el.dataset.a === 'run') launchOwnerTour();
+      else if (el.dataset.a === 'chapter') launchOwnerChapterTour();
       else if (tourSeen('tour-owner-v1')){ localStorage.removeItem('tour-owner-v1'); flash('Auto-tour on — it\'ll show on next load.'); }
       else { markTourSeen('tour-owner-v1'); flash('Auto-tour turned off.'); } }; });
   setTimeout(() => document.addEventListener('click', function h(e){ if (!m.contains(e.target) && e.target.id!=='btn-tour' && !e.target.closest?.('#btn-tour')){ m.remove(); document.removeEventListener('click', h); } }), 0);
 }
 function launchOwnerTour(){ startTour(OWNER_TOUR, { storageKey:'tour-owner-v1' }); }
+// A throwaway demo chapter (sample advisor comment + a sample staged edit + the approve bar) so the
+// reviewing walkthrough points at the real workflow. Nothing is saved; teardown re-renders the real view.
+function loadDemoChapterOwner(){
+  const rd = document.getElementById('read'); if (!rd) return () => {};
+  const prevReading = !!document.querySelector('#doc'); const prevCurrent = current;
+  if (!CHAPTERS.some(c => c.id === current)) current = CHAPTERS[0].id;   // give the topbar a valid chapter name
+  document.getElementById('nav').style.display = ''; document.getElementById('comments').style.display = '';
+  renderTopbar();   // chapter topbar so #btn-send / #btn-more exist for the tour
+  rd.innerHTML = `<div class="approvebar"><i class="ti ti-git-pull-request"></i><span class="tc-legend">1 edit staged for review</span><button class="btn btn-primary" style="margin-left:auto"><i class="ti ti-git-merge"></i>Queue 1 for merge</button></div>
+    <article id="doc">
+      <h1>Chapter 3 · Sample (tour preview)</h1>
+      <p>This preview chapter shows how reviewing works. Nothing here is saved.</p>
+      <p>Radio-frequency heating delivers energy through a dielectric. <span id="tour-o-staged"><del class="tc-stage">the sample phrasing</del> <ins class="tc-stage">clearer sample phrasing</ins></span> is how a proposed edit reads inline.</p>
+      <p>Select any text here to leave your own note or propose exact replacement wording.</p></article>`;
+  const cmt = document.getElementById('comments');
+  if (cmt) cmt.innerHTML = `<div class="lbl"><i class="ti ti-users" style="margin-right:5px"></i>FROM ADVISORS<span style="margin-left:auto">1</span></div>
+    <div id="tour-o-advcard" class="ccard adv" style="border:.5px solid var(--border);border-radius:9px;padding:10px;margin:0 0 10px">
+      <div class="row"><span class="chip advchip"><i class="ti ti-user" style="font-size:11px;margin-right:3px"></i>Sample advisor</span><span class="chip" style="margin-left:5px">wording</span><span class="status" style="margin-left:auto;background:var(--success-bg);color:var(--success)">submitted</span></div>
+      <div class="snip" style="font-size:12.5px;color:var(--text-2);margin:6px 0">"radio-frequency heating delivers energy"</div>
+      <div class="body" style="font-size:13px">Consider defining this for a general reader.</div>
+      <div id="tour-o-resolve" style="display:flex;gap:6px;margin-top:9px"><button class="btn" style="padding:4px 10px;font-size:12px">Addressed</button><button class="btn" style="padding:4px 10px;font-size:12px">Kept as written</button><button class="btn" style="padding:4px 10px;font-size:12px">Noted</button></div>
+    </div>`;
+  return () => { const back = prevCurrent; if (prevReading && CHAPTERS.some(c => c.id === back)) enterChapter(back); else { current = back; enterHome(); } };
+}
+const OWNER_CHAPTER_TOUR = [
+  { sel:'#doc h1', title:'Inside a chapter', body:'The reading view. We loaded a sample chapter so you can see the workflow. Nothing here is saved.' },
+  { sel:'#tour-o-advcard', title:'Advisors\' comments land here', body:'Every comment your advisors leave shows in this rail, pinned to the exact spot. Hover a card to reply, add a private note, or suggest an edit.' },
+  { sel:'#tour-o-resolve', title:'Close the loop', body:'Mark each comment Addressed, Kept as written, or Noted. Your advisor sees the outcome in their Responses view.' },
+  { sel:'#btn-send', title:'Hand work to Claude', body:'Send a comment or a whole chapter to Claude to draft the edit or run a review pass. You approve everything before it lands.' },
+  { sel:'#tour-o-staged', title:'Proposed edits show inline', body:'A staged edit appears as tracked changes right in the text, so you read it in place.' },
+  { sel:'.approvebar', title:'Approve, reject, or request changes', body:'Decide on each staged edit, then Queue them for merge. You can preview the rendered result first.' },
+  { sel:'#doc p', title:'Comment yourself too', body:'Select any text to leave your own note or propose exact replacement wording, the same way your advisors do.' },
+  { sel:'#btn-more', title:'That is the loop', body:'Read, resolve, approve, merge. Reopen this walkthrough anytime from the More menu.' },
+];
+function launchOwnerChapterTour(){ const restore = loadDemoChapterOwner(); startTour(OWNER_CHAPTER_TOUR, { storageKey:'tour-owner-chapter-v1', onDone: restore }); }
 // Mark seen the moment it auto-launches (not just on finish) so a hard refresh never re-triggers it
 // for a returning user. The ⋯ menu lets them replay it or turn auto-show back on.
 if (!tourSeen('tour-owner-v1')){ markTourSeen('tour-owner-v1'); setTimeout(() => { try { launchOwnerTour(); } catch {} }, 1400); }
@@ -1774,11 +1812,12 @@ function openMoreMenu(){
     <div class="mmi" data-act="release"><i class="ti ti-users"></i>Release to advisors…</div>
     <div class="mmi" data-act="help"><i class="ti ti-keyboard"></i>Buttons & shortcuts</div>
     <div class="mmi" data-act="token"><i class="ti ti-key"></i>Access token${hasTok?' <span style="color:var(--success);font-size:11px;margin-left:auto">connected</span>':' <span style="color:var(--warn);font-size:11px;margin-left:auto">not set</span>'}</div>
-    <div class="mmi" data-act="tour"><i class="ti ti-help-circle"></i>Take the tour</div>
+    <div class="mmi" data-act="tour"><i class="ti ti-help-circle"></i>Take the setup tour</div>
+    <div class="mmi" data-act="tourchapter"><i class="ti ti-book-2"></i>Reviewing a chapter (demo)</div>
     <div class="mmi" data-act="tourtoggle"><i class="ti ti-${autoOff?'eye-off':'eye-check'}"></i>Auto-show tour: ${autoOff?'off — turn on':'on — turn off'}</div>
     <div class="mmi" data-act="dash"><i class="ti ti-layout-dashboard"></i>Back to dashboard</div>`;
   document.body.appendChild(menu);
-  const acts = { release: openReleasePanel, help: toggleHelp, token: manageToken, dash: () => location.href = './index.html', tour: launchOwnerTour,
+  const acts = { release: openReleasePanel, help: toggleHelp, token: manageToken, dash: () => location.href = './index.html', tour: launchOwnerTour, tourchapter: launchOwnerChapterTour,
     tourtoggle: () => { if (tourSeen('tour-owner-v1')){ localStorage.removeItem('tour-owner-v1'); flash('Auto-tour turned on — it\'ll show on next load.'); }
       else { markTourSeen('tour-owner-v1'); flash('Auto-tour turned off.'); } } };
   menu.querySelectorAll('.mmi').forEach(el => { el.onmouseenter = () => el.style.background='var(--bg-3)'; el.onmouseleave = () => el.style.background='transparent';
