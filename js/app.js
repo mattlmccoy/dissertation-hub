@@ -1811,11 +1811,13 @@ async function openReleasePanel(){
   const { reg: advReg, sha: advSha } = await loadAdvisorsRegistry(t);
   // discover every reviewer comment file (named advisors AND per-person lab reviewers) via the tree
   const inbox = {};   // inbox[fileId] = [{chapter, comment}]
+  const filesByAdv = {};   // filesByAdv[id] = [comment-file paths] — used to clear a person from the inbox
   let advFilePaths = [];
   try { const paths = await ghTree(t); advFilePaths = paths.filter(p => /^advisor\/[^/]+\/.+\.json$/.test(p)); } catch(e){}
   const pres = {};   // per-advisor presence: unsubmitted-draft count + last-active stamp (drafts stay hidden until Submit)
   await Promise.all(advFilePaths.map(async p => {
     const m = p.match(/^advisor\/([^/]+)\/(.+)\.json$/); const id = m[1], ch = m[2];
+    (filesByAdv[id] = filesByAdv[id] || []).push(p);
     try { const r = await getJson(t, p);
       const drafts = (r.json?.comments||[]).filter(c => c.status==='open').length;
       pres[id] = { drafts: (pres[id]?.drafts||0) + drafts, lastActive: [pres[id]?.lastActive, r.json?.last_active].filter(Boolean).sort().pop() };
@@ -1844,7 +1846,8 @@ async function openReleasePanel(){
     const items = inbox[a]||[]; const unread = unreadOf(a);
     return `<div class="rel-inbox" data-adv="${a}"><div class="rel-inbox-h"><b>${escapeHtml(idLabel(a))}</b>${/^general-/.test(a)?'<span class="chip" style="margin-left:5px">lab</span>':''}<span class="chip" style="background:var(--accent-bg);color:var(--accent)">${items.length} comment${items.length!==1?'s':''}</span>
         <span class="rel-unread" style="margin-left:auto">${advHeadHtml(a)}</span>
-        <button class="btn rel-sendall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px" ${unread?'disabled title="Read every comment from this reviewer first"':''}><i class="ti ti-send"></i>Send unsent</button></div>
+        <button class="btn rel-sendall" data-a="${a}" style="padding:2px 9px;font-size:11.5px;margin-left:6px" ${unread?'disabled title="Read every comment from this reviewer first"':''}><i class="ti ti-send"></i>Send unsent</button>
+        <button class="rel-del" data-a="${a}" data-count="${items.length}" title="Remove this reviewer's comments from your inbox" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;color:var(--text-3);cursor:pointer;font-size:13px;margin-left:2px;opacity:0;transition:opacity .12s"><i class="ti ti-trash"></i></button></div>
         <div style="font-size:11.5px;color:var(--text-3);margin:-1px 0 8px">Reply, suggest edits, and send to Claude from the comment itself — click <b>Open in context</b>.</div>${
       items.length ? items.map(({chapter, c}) => cmtRow(a, chapter, c)).join('') : `<div style="font-size:12.5px;color:var(--text-3);padding:6px 2px">No comments submitted yet.</div>` }</div>`;
   }).join('');
@@ -1897,7 +1900,34 @@ async function openReleasePanel(){
       catch(e){ sa.textContent = 'Failed: ' + e.message; }
     };
   }
-  document.querySelectorAll('.rel-inbox').forEach(box => wireHeader(box, box.dataset.adv));
+  // Clear a reviewer from the inbox: deletes only their comment files (advisor/<id>/*.json).
+  // Independent of the advisor list — advisors.json / release.json are untouched, so the person
+  // stays on your roster and their portal keeps working; this only wipes the received comments.
+  const clearAdvisorInbox = async (a) => {
+    const files = filesByAdv[a] || [];
+    const n = (inbox[a]||[]).length;
+    const label = idLabel(a);
+    const msg = n
+      ? `Delete all ${n} comment${n!==1?'s':''} from ${label}? This removes them from your inbox permanently (recoverable only from the data repo's git history). The reviewer stays on your list and can still comment again later.`
+      : `Remove ${label} from your inbox? They have no submitted comments — this just clears the leftover entry. The reviewer stays on your list.`;
+    if (!confirm(msg)) return;
+    const box = document.querySelector(`.rel-inbox[data-adv="${a}"]`);
+    const btn = box?.querySelector('.rel-del'); if (btn){ btn.style.opacity = '.85'; btn.innerHTML = '<i class="ti ti-loader"></i>'; }
+    try {
+      for (const p of files) await deleteFile(t, p, `inbox: clear ${label}'s comments (${p})`);
+      flash(`Cleared ${label} from your inbox.`);
+      refresh();
+    } catch(e){ flash('Failed: ' + e.message); if (btn){ btn.innerHTML = '<i class="ti ti-trash"></i>'; } }
+  };
+  document.querySelectorAll('.rel-inbox').forEach(box => {
+    wireHeader(box, box.dataset.adv);
+    const del = box.querySelector('.rel-del');
+    if (del){
+      box.addEventListener('mouseenter', () => del.style.opacity = '.85');
+      box.addEventListener('mouseleave', () => del.style.opacity = '0');
+      del.onclick = () => clearAdvisorInbox(box.dataset.adv);
+    }
+  });
   document.querySelectorAll('.rel-row').forEach(el => {
     const a = el.dataset.a, ch = el.dataset.ch, cid = el.dataset.cid;
     el.querySelector('.rel-open').onclick = () => {
