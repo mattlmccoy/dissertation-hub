@@ -843,7 +843,11 @@ function renderResponses(groups){
   const activeSecs=groups.map(g=>{ const cs=(g.comments||[]).filter(c=>!_isArchived(c)); return cs.length?`<div class="resp-sec"><div class="resp-ch">${head(g)}</div>${cs.map(c=>item(c,g.ch)).join('')}</div>`:''; }).join('');
   const resolved=groups.flatMap(g=>(g.comments||[]).filter(c=>_isArchived(c)).map(c=>({c,ch:g.ch})));
   const resolvedHtml=resolved.length?`<div class="resp-resolved-grp"><button class="resp-resolved-head"><i class="ti ti-chevron-${_respResolvedOpen?'down':'right'}"></i><span>Resolved</span><span class="rcount">${resolved.length}</span></button><div class="resp-resolved-body" style="display:${_respResolvedOpen?'block':'none'}">${resolved.map(r=>item(r.c,r.ch)).join('')}</div></div>`:'';
-  read.innerHTML=`<div class="resp-wrap"><h1 class="ol-h1">Responses to your comments</h1>${activeSecs||`<div class="empty" style="margin:8vh auto">You've cleared all your open responses${resolved.length?' — see Resolved below':''}.</div>`}${resolvedHtml}</div>`;
+  const _cn={addressed:0,declined:0,noted:0};
+  for(const c of groups.flatMap(g=>g.comments||[])){ const s=c.resolution&&c.resolution.state; if(s&&_cn[s]!=null) _cn[s]++; }
+  const _parts=[]; if(_cn.addressed) _parts.push(`${_cn.addressed} addressed`); if(_cn.declined) _parts.push(`${_cn.declined} kept as written`); if(_cn.noted) _parts.push(`${_cn.noted} noted`);
+  const _countsLine=_parts.length?`<div class="resp-counts">${_parts.join(' · ')}</div>`:'';
+  read.innerHTML=`<div class="resp-wrap"><h1 class="ol-h1">Responses to your comments</h1>${_countsLine}${activeSecs||`<div class="empty" style="margin:8vh auto">You've cleared all your open responses${resolved.length?' — see Resolved below':''}.</div>`}${resolvedHtml}</div>`;
   read.querySelectorAll('.resp-item').forEach(el=>{
     const cid=el.dataset.cid, ch=el.dataset.ch;
     el.querySelector('.resp-context')?.addEventListener('click',()=>seeInContext(ch, el.dataset.q));
