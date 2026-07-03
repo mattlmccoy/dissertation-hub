@@ -3,6 +3,7 @@
 // privately. Self-contained (only the anchor helper is shared) — no build tooling of any kind.
 import { anchorFromSelection } from './anchor.js?v=b9529aa';
 import { startTour, tourSeen, markTourSeen } from './tour.js?v=b9529aa';
+import { wordDiff } from './textdiff.js';
 
 // A sample chapter shown ONLY during the tour, so the reading + commenting features have real-looking
 // content to point at even before any real chapter is released. Restored when the tour ends. The tour
@@ -290,12 +291,33 @@ function renderDoc(fragment){
 }
 // "what changed since you last looked": per-section content fingerprint, compared to the last visit
 function _hash(s){ let h = 0; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0; return h; }
+function sectionText(h){
+  let txt = h.textContent; let el = h.nextElementSibling;
+  while (el && !/^H[1-3]$/.test(el.tagName)){ txt += ' ' + el.textContent; el = el.nextElementSibling; }
+  return txt.replace(/\s+/g,' ').trim();
+}
 function sectionSig(doc){
-  return [...doc.querySelectorAll('h2, h3')].map(h => {
-    let txt = h.textContent; let el = h.nextElementSibling;
-    while (el && !/^H[1-3]$/.test(el.tagName)){ txt += ' ' + el.textContent; el = el.nextElementSibling; }
-    return { t:h.textContent.trim(), h:_hash(txt.replace(/\s+/g,' ').trim()) };
-  });
+  return [...doc.querySelectorAll('h2, h3')].map(h => { const x = sectionText(h); return { t:h.textContent.trim(), h:_hash(x), x }; });
+}
+// Wrap the words the author ADDED/changed in this section (per the word-diff) in <mark class="wn-add">,
+// walking the section's text nodes in order. Uses the diff only for the added flags; renders the DOM's
+// own text so whitespace/inline markup (citations, math) stay intact.
+function highlightSection(head, tokens){
+  const nodes = []; let wi = 0;
+  const collect = root => { const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let t; while ((t = tw.nextNode())) nodes.push(t); };
+  collect(head);
+  let el = head.nextElementSibling;
+  while (el && !/^H[1-3]$/.test(el.tagName)){ collect(el); el = el.nextElementSibling; }
+  for (const node of nodes){
+    const parts = node.textContent.match(/\s+|\S+/g); if (!parts) continue;   // words AND whitespace runs, preserved
+    const frag = document.createDocumentFragment(); let any = false;
+    for (const p of parts){
+      if (/^\s+$/.test(p)){ frag.appendChild(document.createTextNode(p)); continue; }   // whitespace: pass through, don't consume a diff token
+      const tk = tokens[wi++];
+      if (tk && tk.added){ const mk = document.createElement('mark'); mk.className = 'wn-add'; mk.textContent = p; frag.appendChild(mk); any = true; }
+      else frag.appendChild(document.createTextNode(p)); }
+    if (any) node.replaceWith(frag);
+  }
 }
 function markWhatsNew(doc){
   const key = 'seen:'+effId()+':'+current, cur = sectionSig(doc);
@@ -304,7 +326,9 @@ function markWhatsNew(doc){
     const changed = cur.map((c,i) => prev[i].h !== c.h ? i : -1).filter(i => i >= 0);
     if (changed.length){
       const links = [...document.querySelectorAll('#nav a')];
-      changed.forEach(i => links[i]?.classList.add('changed'));
+      const heads = [...doc.querySelectorAll('h2, h3')];
+      changed.forEach(i => { links[i]?.classList.add('changed');
+        if (prev[i] && prev[i].x != null && heads[i]) highlightSection(heads[i], wordDiff(prev[i].x, cur[i].x)); });
       showNewBanner(changed, doc);
     }
   }
@@ -314,9 +338,10 @@ function showNewBanner(changed, doc){
   document.getElementById('whatsnew')?.remove();
   const heads = [...doc.querySelectorAll('h2, h3')];
   const bar = document.createElement('div'); bar.id = 'whatsnew'; bar.className = 'whatsnew';
-  bar.innerHTML = `<i class="ti ti-sparkles"></i><span><b>${changed.length}</b> section${changed.length>1?'s':''} updated since your last visit</span><button class="wn-go">Jump to first change</button>`;
+  bar.innerHTML = `<i class="ti ti-sparkles"></i><span><b>${changed.length}</b> section${changed.length>1?'s':''} updated since your last visit — the new text is highlighted</span><button class="wn-go">Jump to first change</button>`;
   read.prepend(bar);
-  bar.querySelector('.wn-go').onclick = () => { const h = heads[changed[0]]; if (h){ h.scrollIntoView({behavior:'smooth',block:'start'}); h.classList.add('flash'); setTimeout(() => h.classList.remove('flash'), 1500); } };
+  bar.querySelector('.wn-go').onclick = () => { const mk = doc.querySelector('.wn-add'), h = heads[changed[0]]; const target = mk || h;
+    if (target){ target.scrollIntoView({behavior:'smooth',block:'center'}); if (h){ h.classList.add('flash'); setTimeout(() => h.classList.remove('flash'), 1500); } }; };
 }
 const SIUNITX = { henry:'H',farad:'F',ohm:'\\Omega',siemens:'S',volt:'V',watt:'W',ampere:'A',kelvin:'K',hertz:'Hz',joule:'J',newton:'N',pascal:'Pa',metre:'m',meter:'m',gram:'g',mole:'mol',tesla:'T',weber:'Wb',coulomb:'C',radian:'rad',decibel:'dB',inch:'in',poise:'P',percent:'\\%',degree:'^\\circ',nano:'n',micro:'\\mu',milli:'m',pico:'p',femto:'f',kilo:'k',mega:'M',giga:'G',centi:'c',deci:'d' };
 function expandUnits(tex){ return tex.replace(/\\degreeCelsius\b/g,'{}^\\circ\\mathrm{C}').replace(/\\([a-zA-Z]+)\b/g,(m,name)=>{ if(!(name in SIUNITX)) return m; const v=SIUNITX[name]; return /^[A-Za-z]+$/.test(v)?`\\mathrm{${v}}`:v; }); }
