@@ -359,8 +359,8 @@ async function stageDirectEdit(ch, source, newSource, before, after){
   renderComments(); refreshStaged();
 }
 // ---------- advisor comments surfaced in the owner reviewer ----------
-const ADVISOR_IDS = ['CJS','CCS'];
-const ADVISOR_NAME = { CJS:'Saldaña', CCS:'Seepersad' };
+const ADVISOR_IDS = [];   // legacy hardcoded committee (CJS/CCS) removed — reviewers now come only from advisors.json (invited) + ghTree discovery
+const ADVISOR_NAME = {};
 // label a comment's source: named advisor → their name; a shared lab reviewer (general-<slug>) → the name they entered
 const whoLabel = c => ADVISOR_NAME[c._advisor] || (/^general-/.test(c._advisor||'') ? (c.author || 'Lab reviewer') : c._advisor);
 // an advisor's follow-up replies (when they felt a response was incomplete) + a re-opened flag
@@ -1892,8 +1892,7 @@ async function openReleasePanel(){
   let rel, sha;
   try { const r = await getJson(t, 'release.json'); rel = r.json || {}; sha = r.sha; }
   catch(e){ document.getElementById('rel-body').textContent = 'Could not load release.json ('+e.message+').'; return; }
-  if (!rel.general) rel.general = { name:'General reviewers', released:[] };   // shared lab-reviewer gate
-  const advs = Object.keys(rel).filter(k => k !== '_comment');                 // gating rows + portal links
+  const advs = Object.keys(rel).filter(k => k !== '_comment');                 // gating rows + portal links (reviewers come from release.json / advisors.json — no hardcoded 'general')
   const base = location.origin + location.pathname.replace(/[^/]+$/, '');
   const { reg: advReg, sha: advSha } = await loadAdvisorsRegistry(t);
   // discover every reviewer comment file (named advisors AND per-person lab reviewers) via the tree
