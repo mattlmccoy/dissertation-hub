@@ -702,6 +702,32 @@ def cmd_publish_srcmaps(a):
     print(f"{C['g']}Published {built} source map(s).{C['x']}")
 
 
+def cmd_refresh_source(a):
+    """Copy the dissertation main.tex into the data repo as source/main.tex, so the Footnote reviewer header
+    pulls the real \\title (the source of truth) instead of a hand-kept copy. Idempotent: no commit when the
+    file is unchanged. --dry-run reports without touching the repo."""
+    src = os.path.join(a.diss, "main.tex")
+    if not os.path.exists(src):
+        sys.exit(f"{C['r']}main.tex not found at {src}{C['x']}")
+    new = open(src, encoding="utf-8").read()
+    if not a.dry_run:
+        pull(a.data)
+    dst_dir = os.path.join(a.data, "source")
+    dst = os.path.join(dst_dir, "main.tex")
+    old = open(dst, encoding="utf-8").read() if os.path.exists(dst) else None
+    if new == old:
+        print(f"{C['dim']}source/main.tex already up to date.{C['x']}")
+        return
+    if a.dry_run:
+        print(f"{C['y']}[dry-run] would refresh source/main.tex ({len(new)} bytes) from {src}{C['x']}")
+        return
+    os.makedirs(dst_dir, exist_ok=True)
+    with open(dst, "w", encoding="utf-8") as f:
+        f.write(new)
+    _push_data(a, "refresh: dissertation source/main.tex (reviewer title source)")
+    print(f"{C['g']}source/main.tex refreshed from the dissertation + pushed.{C['x']}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data", default=DEFAULT_DATA, help="local clone of dissertation-tracker-data")
@@ -718,6 +744,7 @@ def main():
     sp = sub.add_parser("export", help="build a queued export job (chapter/dissertation -> docx·pdf·md with comments)"); sp.add_argument("job_id"); sp.set_defaults(fn=cmd_export)
     sp = sub.add_parser("apply-direct", help="apply owner direct-edits literally to source on review-edits/<ch>"); sp.add_argument("job_id"); sp.set_defaults(fn=cmd_apply_direct)
     sub.add_parser("publish-srcmaps", help="generate content/<ch>.srcmap.json for all chapters (enables in-context editing)").set_defaults(fn=cmd_publish_srcmaps)
+    sp = sub.add_parser("refresh-source", help="copy the dissertation main.tex -> data source/main.tex (reviewer title source of truth)"); sp.add_argument("--dry-run", action="store_true"); sp.set_defaults(fn=cmd_refresh_source)
     sp_decide = sub.add_parser("decide", help="record an owner decision on a staged comment"); sp_decide.add_argument("chapter"); sp_decide.add_argument("comment_id"); sp_decide.add_argument("decision", choices=["approve", "reject", "revise"]); sp_decide.add_argument("note", nargs="?", default=""); sp_decide.set_defaults(fn=cmd_decide)
     sub.add_parser("advisor-list", help="list advisor-submitted comments + resolutions").set_defaults(fn=cmd_advisor_list)
     sp = sub.add_parser("advisor-resolve", help="record how an advisor comment was addressed"); sp.add_argument("advisor"); sp.add_argument("chapter"); sp.add_argument("comment_id"); sp.add_argument("state", choices=["addressed","declined","noted"]); sp.add_argument("note"); sp.add_argument("--before", default=""); sp.add_argument("--after", default=""); sp.set_defaults(fn=cmd_advisor_resolve)
