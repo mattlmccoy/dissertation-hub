@@ -449,9 +449,15 @@ def cmd_advisor_resolve(a):
     hit["resolution"] = {"state": a.state, "note": a.note, "ts": now()}
     if a.before: hit["resolution"]["before"] = a.before
     if a.after:  hit["resolution"]["after"] = a.after
+    # Close the comment so it leaves the reviewer's "submitted" panel (advisor.js filters by
+    # status==='submitted'; recording only a resolution left AI-reviewer comments stuck open).
+    # 'addressed'/'declined' are terminal; 'noted' is a non-closing acknowledgement, left submitted.
+    if a.state in ("addressed", "declined"):
+        hit["status"] = "resolved"
     dump(p, data)
     _push_data(a, f"resolution: {a.advisor} {a.chapter} {a.comment_id} ({a.state})")
-    print(f"{C['g']}Recorded '{a.state}' on {a.advisor}/{a.chapter}/{a.comment_id}; the advisor sees it on their portal.{C['x']}")
+    closed = " and closed (status=resolved)" if a.state in ("addressed", "declined") else ""
+    print(f"{C['g']}Recorded '{a.state}' on {a.advisor}/{a.chapter}/{a.comment_id}{closed}; the advisor sees it on their portal.{C['x']}")
 
 
 # ---------------- export: chapter / dissertation -> docx · pdf · md, with comments ----------------
