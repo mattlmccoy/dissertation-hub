@@ -1,12 +1,5 @@
 let _seq = 0;
 const nid = () => `c_${Date.now().toString(36)}_${(_seq++).toString(36)}`;
-
-// A comment is "resolved" (folds into the Resolved group; drops out of open counts) once the
-// author records a resolution OR it is explicitly resolved here — regardless of a stale
-// status==='submitted' (e.g. an author/tool that wrote only a resolution). 'reopened' wins.
-export const isResolved = (c) =>
-  !c.reopened && (!!c.resolution || c.status === 'resolved' || c.advisor_state === 'resolved');
-
 export const newReview = (chapter, builtFrom) =>
   ({ chapter, built_from_commit: builtFrom, synctex_present:false, cursor:null, comments:[] });
 export const addComment = (r, c) => ({ ...r, comments:[...r.comments, {

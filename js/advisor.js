@@ -4,7 +4,6 @@
 import { anchorFromSelection } from './anchor.js?v=95db165';
 import { startTour, tourSeen, markTourSeen } from './tour.js?v=95db165';
 import { wordDiff } from './textdiff.js?v=95db165';
-import { isResolved } from './model.js?v=95db165';
 
 // A sample chapter shown ONLY during the tour, so the reading + commenting features have real-looking
 // content to point at even before any real chapter is released. Restored when the tour ends. The tour
@@ -419,7 +418,7 @@ function buildNav(){
   review.read=review.read||{};   // advisor-private per-section read check-offs
   const doneN=hs.filter((h,i)=>review.read[h.id||('sec-'+i)]).length;
   nav.innerHTML=`<div class="lbl">SECTIONS<span style="margin-left:auto">${doneN}/${hs.length}</span></div>`;
-  hs.forEach((h,i)=>{ if(!h.id) h.id='sec-'+i; const sub=h.tagName==='H3'; const cnt=review.comments.filter(c=>(c.anchor.section||'')===h.textContent.trim() && !isResolved(c)).length;   // open (non-resolved) only
+  hs.forEach((h,i)=>{ if(!h.id) h.id='sec-'+i; const sub=h.tagName==='H3'; const cnt=review.comments.filter(c=>(c.anchor.section||'')===h.textContent.trim()).length;
     const done=!!review.read[h.id];
     const a=document.createElement('a'); a.className=sub?'sub':''; a.dataset.sec=h.id;
     a.innerHTML=`<button class="chk${done?' on':''}" title="Mark section read"><i class="ti ti-${done?'circle-check-filled':'circle'}"></i></button>
@@ -577,7 +576,7 @@ function threadHtml(c){ return (c.thread||[]).map(m=>`<div class="resp-fup" styl
 function seenHtml(c){ return c.read?`<div class="seen"><i class="ti ti-check" style="font-size:11px"></i> Seen by the author</div>`:''; }
 // a comment leaves the active rail once the author has addressed it (recorded a
 // resolution) or it has been resolved here — it folds into the collapsed Resolved group.
-const _isArchived = isResolved;   // shared, tested predicate (js/model.js): resolution ⇒ closed regardless of status
+const _isArchived = c => !c.reopened && (!!c.resolution || c.status==='resolved' || c.advisor_state==='resolved');
 function _buildCard(c){
   const card=document.createElement('div'); card.className='ccard'; card.dataset.id=c.id;
   if(editingId===c.id){ card.appendChild(editCard(c)); return card; }
